@@ -15,7 +15,15 @@ class FootballScreen extends StatefulWidget {
   State<FootballScreen> createState() => _FootballScreenState();
 }
 
-class _FootballScreenState extends State<FootballScreen> {
+class _FootballScreenState extends State<FootballScreen>
+    with SingleTickerProviderStateMixin {
+  /// View mode: true = map view, false = list view
+  bool _isMapView = false;
+
+  /// Animation controller for blinking markers
+  late AnimationController _blinkController;
+  late Animation<double> _blinkAnimation;
+
   /// Mock data for active games
   final List<Map<String, dynamic>> _activeGames = [
     {
@@ -49,6 +57,17 @@ class _FootballScreenState extends State<FootballScreen> {
   @override
   void initState() {
     super.initState();
+    
+    // Initialize blink animation for map markers
+    _blinkController = AnimationController(
+      duration: const Duration(milliseconds: 1500),
+      vsync: this,
+    )..repeat(reverse: true);
+    
+    _blinkAnimation = Tween<double>(begin: 0.3, end: 1.0).animate(
+      CurvedAnimation(parent: _blinkController, curve: Curves.easeInOut),
+    );
+    
     _teamRequests = [
       TeamRequest(
         id: '1',
@@ -84,6 +103,12 @@ class _FootballScreenState extends State<FootballScreen> {
         status: 'active',
       ),
     ];
+  }
+
+  @override
+  void dispose() {
+    _blinkController.dispose();
+    super.dispose();
   }
 
   /// Refreshes the data (mock implementation)
@@ -149,7 +174,7 @@ class _FootballScreenState extends State<FootballScreen> {
           ),
           const SizedBox(height: 24),
 
-          // Ground Selection
+          // Ground selection dropdown
           Text(
             'SELECT GROUND',
             style: theme.textTheme.titleMedium?.copyWith(
@@ -238,7 +263,6 @@ class _FootballScreenState extends State<FootballScreen> {
                 ),
               ),
               onPressed: () {
-                // Add new team request
                 setState(() {
                   _teamRequests.insert(
                     0,
@@ -257,7 +281,6 @@ class _FootballScreenState extends State<FootballScreen> {
                 });
                 Navigator.pop(context);
 
-                // Show success message
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: const Text('Team request created successfully!'),
@@ -316,6 +339,13 @@ class _FootballScreenState extends State<FootballScreen> {
       appBar: AppBar(
         title: const Text('FOOTBALL'),
         actions: [
+          // Toggle view button
+          IconButton(
+            icon: Icon(_isMapView ? Icons.view_list : Icons.map_outlined),
+            onPressed: () {
+              setState(() => _isMapView = !_isMapView);
+            },
+          ),
           IconButton(
             icon: _isLoading
                 ? SizedBox(
@@ -338,9 +368,15 @@ class _FootballScreenState extends State<FootballScreen> {
         icon: const Icon(Icons.search),
         label: const Text('FIND PLAYERS'),
       ),
-      body: RefreshIndicator(
-        onRefresh: _refreshData,
-        child: ListView(
+      body: _isMapView ? _buildMapView(theme) : _buildListView(theme),
+    );
+  }
+
+  /// Builds the list view (original view)
+  Widget _buildListView(ThemeData theme) {
+    return RefreshIndicator(
+      onRefresh: _refreshData,
+      child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
             // Active Games Section
@@ -420,7 +456,124 @@ class _FootballScreenState extends State<FootballScreen> {
             const SizedBox(height: 24),
           ],
         ),
+      );
+  }
+
+  /// Builds the map view with ground locations
+  Widget _buildMapView(ThemeData theme) {
+    final width = MediaQuery.of(context).size.width;
+
+    return SingleChildScrollView(
+      child: SizedBox(
+        height: 800,
+        child: Stack(
+          children: [
+            // Map background with grey outlines
+            CustomPaint(
+              size: Size(width, 800),
+              painter: FootballMapPainter(),
+            ),
+
+            // Ground markers
+            ..._buildGroundMarkers(theme),
+          ],
+        ),
       ),
+    );
+  }
+
+  /// Builds markers for each ground with team requests
+  List<Widget> _buildGroundMarkers(ThemeData theme) {
+    // Define ground positions on the map (x, y coordinates)
+    final Map<int, Offset> groundPositions = {
+      1: const Offset(100, 150),
+      2: const Offset(250, 200),
+      3: const Offset(150, 350),
+      4: const Offset(280, 450),
+      5: const Offset(120, 550),
+    };
+
+    List<Widget> markers = [];
+
+    // Add markers for team requests
+    for (var request in _teamRequests) {
+      final position = groundPositions[request.groundNumber];
+      if (position != null) {
+        markers.add(
+          Positioned(
+            left: position.dx,
+            top: position.dy,
+            child: _buildGroundMarker(request, theme),
+          ),
+        );
+      }
+    }
+
+    return markers;
+  }
+
+  /// Builds a single ground marker with blinking animation
+  Widget _buildGroundMarker(TeamRequest request, ThemeData theme) {
+    return AnimatedBuilder(
+      animation: _blinkAnimation,
+      builder: (context, child) {
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Blinking circle
+            Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.black,
+                border: Border.all(
+                  color: const Color(0xFF7CFC00).withOpacity(_blinkAnimation.value),
+                  width: 2,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF7CFC00).withOpacity(_blinkAnimation.value * 0.5),
+                    blurRadius: 20,
+                    spreadRadius: 5,
+                  ),
+                ],
+              ),
+              child: Center(
+                child: Text(
+                  '${request.currentPlayers}/${request.playersNeeded}',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    color: const Color(0xFF7CFC00),
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            // Ground name
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.8),
+                border: Border.all(
+                  color: const Color(0xFF7CFC00).withOpacity(0.3),
+                  width: 1,
+                ),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                'Ground ${request.groundNumber}',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: const Color(0xFF7CFC00),
+                  fontWeight: FontWeight.w600,
+                  fontSize: 11,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -687,4 +840,110 @@ class _FootballScreenState extends State<FootballScreen> {
       ),
     );
   }
+}
+
+/// Custom painter for football field map background
+class FootballMapPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0xFF1A1A1A)
+      ..style = PaintingStyle.fill;
+
+    final borderPaint = Paint()
+      ..color = const Color(0xFF444444)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+
+    final gridPaint = Paint()
+      ..color = const Color(0xFF2A2A2A)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+
+    // Draw dark background
+    canvas.drawRect(
+      Rect.fromLTWH(0, 0, size.width, size.height),
+      paint,
+    );
+
+    // Draw subtle grid pattern
+    const gridSpacing = 50.0;
+    for (double i = 0; i < size.width; i += gridSpacing) {
+      canvas.drawLine(
+        Offset(i, 0),
+        Offset(i, size.height),
+        gridPaint,
+      );
+    }
+    for (double i = 0; i < size.height; i += gridSpacing) {
+      canvas.drawLine(
+        Offset(0, i),
+        Offset(size.width, i),
+        gridPaint,
+      );
+    }
+
+    // Draw football field outlines (5 fields)
+    final fieldPaint = Paint()
+      ..color = const Color(0xFF7CFC00).withOpacity(0.15)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+
+    // Field 1
+    _drawFootballField(canvas, const Offset(60, 110), 100, 80, fieldPaint);
+    
+    // Field 2
+    _drawFootballField(canvas, const Offset(210, 160), 100, 80, fieldPaint);
+    
+    // Field 3
+    _drawFootballField(canvas, const Offset(110, 310), 100, 80, fieldPaint);
+    
+    // Field 4
+    _drawFootballField(canvas, const Offset(240, 410), 100, 80, fieldPaint);
+    
+    // Field 5
+    _drawFootballField(canvas, const Offset(80, 510), 100, 80, fieldPaint);
+
+    // Draw outer border
+    canvas.drawRect(
+      Rect.fromLTWH(0, 0, size.width, size.height),
+      borderPaint,
+    );
+  }
+
+  /// Helper method to draw a simplified football field
+  void _drawFootballField(Canvas canvas, Offset position, double width, double height, Paint paint) {
+    // Outer rectangle
+    canvas.drawRect(
+      Rect.fromLTWH(position.dx, position.dy, width, height),
+      paint,
+    );
+
+    // Center line
+    canvas.drawLine(
+      Offset(position.dx + width / 2, position.dy),
+      Offset(position.dx + width / 2, position.dy + height),
+      paint,
+    );
+
+    // Center circle
+    canvas.drawCircle(
+      Offset(position.dx + width / 2, position.dy + height / 2),
+      15,
+      paint,
+    );
+
+    // Goal areas
+    canvas.drawRect(
+      Rect.fromLTWH(position.dx, position.dy + height / 3, width * 0.15, height / 3),
+      paint,
+    );
+    canvas.drawRect(
+      Rect.fromLTWH(position.dx + width * 0.85, position.dy + height / 3, width * 0.15, height / 3),
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
