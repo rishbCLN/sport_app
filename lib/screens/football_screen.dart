@@ -409,6 +409,10 @@ class _FootballScreenState extends State<FootballScreen> {
       _currentJoinedTeamId = req.id;
       _teamChats.putIfAbsent(req.id, () => []);
     });
+    // Auto-open team chat as a welcome gesture
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _showTeamChat(req);
+    });
   }
 
   /// Leaves the currently joined team.
@@ -639,7 +643,7 @@ class _FootballScreenState extends State<FootballScreen> {
             crossAxisCount: 2,
             crossAxisSpacing: 14,
             mainAxisSpacing: 14,
-            childAspectRatio: 0.70,
+            childAspectRatio: 0.72,
             children: [
               _GroundCard(
                 label: 'Sand Ground',
@@ -1441,72 +1445,50 @@ class _GroundCardState extends State<_GroundCard>
                 ),
               // Content
               Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Row: surface chip + avatar
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: _accentColor.withOpacity(0.14),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: _accentColor.withOpacity(0.38),
-                              width: 1,
+                    // Avatar row — only visible when user has joined here
+                    if (isUserHere)
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: AnimatedBuilder(
+                          animation: _pulseAnim,
+                          builder: (_, __) => Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: const Color(0xFF7CFC00),
+                                width: 2,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFF7CFC00)
+                                      .withOpacity(_pulseAnim.value * 0.65),
+                                  blurRadius: 14,
+                                  spreadRadius: 2,
+                                ),
+                              ],
                             ),
-                          ),
-                          child: Text(
-                            widget.isSand ? 'SAND' : 'HARD',
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: _accentColor,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 1.2,
-                              fontSize: 10,
+                            child: CircleAvatar(
+                              backgroundColor: const Color(0xFF122012),
+                              child: Text(
+                                widget.currentUserInitial,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w900,
+                                  color: widget.currentUserColor,
+                                ),
+                              ),
                             ),
                           ),
                         ),
-                        const Spacer(),
-                        // Pulsing user avatar when joined here
-                        if (isUserHere)
-                          AnimatedBuilder(
-                            animation: _pulseAnim,
-                            builder: (_, __) => Container(
-                              width: 36,
-                              height: 36,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: const Color(0xFF7CFC00),
-                                  width: 2,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: const Color(0xFF7CFC00)
-                                        .withOpacity(_pulseAnim.value * 0.65),
-                                    blurRadius: 14,
-                                    spreadRadius: 2,
-                                  ),
-                                ],
-                              ),
-                              child: CircleAvatar(
-                                backgroundColor: const Color(0xFF122012),
-                                child: Text(
-                                  widget.currentUserInitial,
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w900,
-                                    color: widget.currentUserColor,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
+                      )
+                    else
+                      const SizedBox(height: 4),
                     const SizedBox(height: 10),
                     // Ground name
                     Text(
@@ -1535,30 +1517,37 @@ class _GroundCardState extends State<_GroundCard>
 
   Widget _buildDeck(ThemeData theme) {
     final count = widget.requests.length;
-    final deckDepth = count.clamp(0, 2);
+    final deckDepth = count.clamp(0, 3);
 
     return SizedBox(
-      height: 90,
+      height: 110,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
           for (int i = 0; i < deckDepth; i++)
             Positioned(
-              bottom: i * 7.0,
-              left: (deckDepth - i - 1) * 4.0,
-              right: -(deckDepth - i - 1) * 4.0,
+              bottom: i * 13.0,
+              left: (deckDepth - i - 1) * 7.0,
+              right: -(deckDepth - i - 1) * 7.0,
               child: Transform.rotate(
-                angle: (i - deckDepth / 2) * 0.055,
+                angle: (i - deckDepth / 2) * 0.09,
                 child: Container(
-                  height: 66,
+                  height: 70,
                   decoration: BoxDecoration(
                     color:
-                        const Color(0xFF1C1C1C).withOpacity(0.88 - i * 0.12),
+                        const Color(0xFF1C1C1C).withOpacity(0.92 - i * 0.15),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: _accentColor.withOpacity(0.18),
+                      color: _accentColor.withOpacity(0.28 - i * 0.06),
                       width: 1,
                     ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.45),
+                        blurRadius: 6,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -1568,7 +1557,7 @@ class _GroundCardState extends State<_GroundCard>
             left: 0,
             right: 0,
             child: Container(
-              height: 70,
+              height: 74,
               padding:
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
@@ -2209,11 +2198,14 @@ class _TeamChatSheetState extends State<_TeamChatSheet> {
     );
     widget.onSend(msg);
     _inputCtrl.clear();
+    // Rebuild the sheet immediately so the new message appears without
+    // needing to dismiss the keyboard first.
+    setState(() {});
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollCtrl.hasClients) {
         _scrollCtrl.animateTo(
           _scrollCtrl.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 250),
+          duration: const Duration(milliseconds: 300),
           curve: Curves.easeOut,
         );
       }
@@ -2239,18 +2231,16 @@ class _TeamChatSheetState extends State<_TeamChatSheet> {
     final theme = Theme.of(context);
     final groundName =
         widget.request.groundNumber == 1 ? 'Sand Ground' : 'Hard Ground';
+    final viewInsets = MediaQuery.of(context).viewInsets.bottom;
 
-    return Padding(
-      padding:
-          EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: Container(
-        height: MediaQuery.of(context).size.height * 0.72,
-        decoration: const BoxDecoration(
-          color: Color(0xFF111111),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: Column(
-          children: [
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.72,
+      decoration: const BoxDecoration(
+        color: Color(0xFF111111),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        children: [
             // ── Handle + Header ─────────────────────────────────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 14, 12, 0),
@@ -2517,9 +2507,11 @@ class _TeamChatSheetState extends State<_TeamChatSheet> {
                 ],
               ),
             ),
+            // Keyboard spacer — sits under the keyboard so the input
+            // stays visible without needing to dismiss the keyboard.
+            SizedBox(height: viewInsets),
           ],
         ),
-      ),
     );
   }
 }
