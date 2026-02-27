@@ -37,6 +37,11 @@ class _FootballScreenState extends State<FootballScreen> {
   int _elapsedSeconds = 0;
   Timer? _mainTimer;
 
+  // ── Team membership, chat & auto-dissolution ─────────────────────────────
+  String? _currentJoinedTeamId;
+  final Map<String, List<_ChatMessage>> _teamChats = {};
+  Timer? _expiryTimer;
+
   @override
   void initState() {
     super.initState();
@@ -62,17 +67,14 @@ class _FootballScreenState extends State<FootballScreen> {
         status: 'active',
       ),
     ];
+    _startExpiryTimer();
   }
 
   @override
   void dispose() {
     _mainTimer?.cancel();
+    _expiryTimer?.cancel();
     super.dispose();
-  }
-
-  /// Returns the display name for a ground number.
-  String _getGroundName(int groundNumber) {
-    return groundNumber == 1 ? 'Sand Ground' : 'Hard Ground';
   }
 
   /// Refreshes the data (mock implementation)
@@ -298,60 +300,6 @@ class _FootballScreenState extends State<FootballScreen> {
     );
   }
 
-  /// Opens the "Join a Team" ground map modal.
-  ///
-  /// Uses a macOS-style scale-from-bottom + fade page transition so the modal
-  /// feels like it rises and expands from the FAB position.
-  void _showJoinTeamModal() {
-    Navigator.push<void>(
-      context,
-      PageRouteBuilder<void>(
-        opaque: false,
-        barrierDismissible: true,
-        barrierColor: Colors.black.withOpacity(0.78),
-        transitionDuration: const Duration(milliseconds: 340),
-        reverseTransitionDuration: const Duration(milliseconds: 280),
-        pageBuilder: (ctx, _, __) => _JoinTeamModal(
-          teamRequests: _teamRequests,
-          onJoin: (_) => setState(() {}),
-        ),
-        transitionsBuilder: (ctx, animation, _, child) {
-          return FadeTransition(
-            opacity: CurvedAnimation(
-              parent: animation,
-              curve: Curves.easeOut,
-            ),
-            child: ScaleTransition(
-              scale: Tween<double>(begin: 0.94, end: 1.0).animate(
-                CurvedAnimation(
-                  parent: animation,
-                  curve: Curves.easeOutCubic,
-                ),
-              ),
-              alignment: Alignment.bottomCenter,
-              child: child,
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  /// Formats the time difference into a human-readable string
-  String _getTimeAgo(DateTime dateTime) {
-    final difference = DateTime.now().difference(dateTime);
-
-    if (difference.inSeconds < 60) {
-      return 'now';
-    } else if (difference.inMinutes < 60) {
-      return '${difference.inMinutes}m ago';
-    } else if (difference.inHours < 24) {
-      return '${difference.inHours}h ago';
-    } else {
-      return '${difference.inDays}d ago';
-    }
-  }
-
   /// Formats elapsed seconds into MM:SS display string (max 10:00).
   String _formatTime(int totalSeconds) {
     final clamped = totalSeconds.clamp(0, 600);
@@ -421,6 +369,125 @@ class _FootballScreenState extends State<FootballScreen> {
       _timerRunning = false;
       _elapsedSeconds = 0;
     });
+  }
+
+  /// Joins a team request, enforcing single-team restriction.
+  void _joinTeam(TeamRequest req) {
+    if (_currentJoinedTeamId != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+              "You're already in a team. Leave current team first."),
+          backgroundColor: Colors.orange.shade800,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12)),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+    setState(() {
+      _currentJoinedTeamId = req.id;
+      _teamChats.putIfAbsent(req.id, () => []);
+    });
+  }
+
+  /// Leaves the currently joined team.
+  void _leaveTeam() {
+    setState(() {
+      _currentJoinedTeamId = null;
+    });
+  }
+
+  /// Starts the 30-minute auto-dissolution background timer.
+  void _startExpiryTimer() {
+    _expiryTimer?.cancel();
+    _expiryTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (!mounted) return;
+      _checkExpiredTeams();
+    });
+  }
+
+  /// Removes team requests older than 30 minutes and notifies the user.
+  void _checkExpiredTeams() {
+    final now = DateTime.now();
+    final expiredIds = _teamRequests
+        .where((r) => now.difference(r.createdAt).inMinutes >= 30)
+        .map((r) => r.id)
+        .toList();
+    if (expiredIds.isEmpty) return;
+    final wasInExpired = _currentJoinedTeamId != null &&
+        expiredIds.contains(_currentJoinedTeamId);
+    setState(() {
+      _teamRequests.removeWhere((r) => expiredIds.contains(r.id));
+      if (wasInExpired) _currentJoinedTeamId = null;
+    });
+    if (wasInExpired) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Team disbanded after 30 minutes'),
+          backgroundColor: Colors.red.shade800,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12)),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
+  /// Returns requests filtered and sorted for the given ground numbers.
+  List<TeamRequest> _requestsForGround(List<int> numbers) {
+    return _teamRequests
+        .where((r) => numbers.contains(r.groundNumber))
+        .toList()
+      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+  }
+
+  /// Opens a [_GroundRequestsSheet] directly from the main screen.
+  void _openGroundSheet(String groundLabel, List<TeamRequest> requests) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => _GroundRequestsSheet(
+        groundLabel: groundLabel,
+        requests: requests,
+        currentJoinedTeamId: _currentJoinedTeamId,
+        currentUserName: _currentUser.name,
+        onJoin: (req) {
+          _joinTeam(req);
+          Navigator.pop(context);
+        },
+        onLeave: () {
+          _leaveTeam();
+          Navigator.pop(context);
+        },
+        onOpenChat: _showTeamChat,
+      ),
+    );
+  }
+
+  /// Opens the ephemeral team chat sheet for [req].
+  void _showTeamChat(TeamRequest req) {
+    _teamChats.putIfAbsent(req.id, () => []);
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => _TeamChatSheet(
+        request: req,
+        currentUserId: _currentUser.userId,
+        currentUserName: _currentUser.name,
+        messages: _teamChats[req.id]!,
+        onSend: (msg) {
+          setState(() {
+            _teamChats.putIfAbsent(req.id, () => []).add(msg);
+          });
+        },
+      ),
+    );
   }
 
   /// Opens the standalone timer bottom sheet.
@@ -496,100 +563,96 @@ class _FootballScreenState extends State<FootballScreen> {
         ],
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-      floatingActionButton: Row(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          FloatingActionButton.extended(
-            heroTag: 'join_team_fab',
-            onPressed: _showJoinTeamModal,
-            icon: const Icon(Icons.groups_outlined),
-            label: const Text('JOIN A TEAM'),
-            backgroundColor: const Color(0xFF1A2A3A),
-            foregroundColor: const Color(0xFF4A90D9),
-          ),
-          const SizedBox(width: 12),
-          FloatingActionButton.extended(
-            heroTag: 'find_players_fab',
-            onPressed: _showCreateTeamSheet,
-            icon: const Icon(Icons.search),
-            label: const Text('FIND PLAYERS'),
-          ),
-        ],
+      floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'find_players_fab',
+        onPressed: _showCreateTeamSheet,
+        icon: const Icon(Icons.add),
+        label: const Text('FIND PLAYERS'),
       ),
       body: _buildListView(theme),
     );
   }
 
-  /// Builds the list view (original view)
+  /// Builds the main list view with personal stats and ground cards.
   Widget _buildListView(ThemeData theme) {
+    final size = MediaQuery.of(context).size;
+    final sandRequests = _requestsForGround([1]);
+    final hardRequests = _requestsForGround([2]);
+
     return RefreshIndicator(
       onRefresh: _refreshData,
       child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            // ── Personal stats card ───────────────────────────────────────
-            _buildPersonalStatsCard(theme),
-            const SizedBox(height: 24),
+        padding: const EdgeInsets.all(16),
+        children: [
+          // ── Personal stats card ─────────────────────────────────────────
+          _buildPersonalStatsCard(theme),
+          const SizedBox(height: 24),
 
-            // Looking for Players Section
-            ShaderMask(
-              shaderCallback: (bounds) => const LinearGradient(
-                colors: [Color(0xFF7CFC00), Color(0xFF9AFF00)],
-              ).createShader(bounds),
-              child: Text(
-                'LOOKING FOR PLAYERS',
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 2,
-                  color: Colors.white,
-                ),
+          // ── FIND A TEAM section header ──────────────────────────────────
+          ShaderMask(
+            shaderCallback: (bounds) => const LinearGradient(
+              colors: [Color(0xFF7CFC00), Color(0xFF9AFF00)],
+            ).createShader(bounds),
+            child: Text(
+              'FIND A TEAM',
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w900,
+                letterSpacing: 2,
+                color: Colors.white,
               ),
             ),
-            const SizedBox(height: 12),
-            if (_teamRequests.isEmpty)
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 48),
-                  child: Column(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(24),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFF7CFC00).withOpacity(0.2),
-                              blurRadius: 40,
-                              spreadRadius: 10,
-                            ),
-                          ],
-                        ),
-                        child: Icon(
-                          Icons.groups_2_outlined,
-                          size: 64,
-                          color: theme.colorScheme.primary.withOpacity(0.6),
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      Text(
-                        'NO TEAM REQUESTS YET',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          color: theme.colorScheme.primary.withOpacity(0.7),
-                          letterSpacing: 1.5,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            else
-              ..._teamRequests.map((request) =>
-                  _buildTeamRequestCard(request, theme)),
-            const SizedBox(height: 24),
-          ],
-        ),
-      );
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Tap a ground to see active team requests',
+            style: theme.textTheme.bodySmall?.copyWith(color: Colors.white38),
+          ),
+          const SizedBox(height: 12),
+
+          // ── Ground cards grid ───────────────────────────────────────────
+          GridView.count(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisCount: 2,
+            crossAxisSpacing: 14,
+            mainAxisSpacing: 14,
+            childAspectRatio: 0.70,
+            children: [
+              _GroundCard(
+                label: 'Sand Ground',
+                isSand: true,
+                requests: sandRequests,
+                screenWidth: size.width,
+                currentJoinedTeamId: _currentJoinedTeamId,
+                currentUserInitial: _currentUser.name.isNotEmpty
+                    ? _currentUser.name[0].toUpperCase()
+                    : '?',
+                currentUserColor: _currentUser.getVibeColor(),
+                onTap: sandRequests.isEmpty
+                    ? null
+                    : () => _openGroundSheet('Sand Ground', sandRequests),
+              ),
+              _GroundCard(
+                label: 'Hard Ground',
+                isSand: false,
+                requests: hardRequests,
+                screenWidth: size.width,
+                currentJoinedTeamId: _currentJoinedTeamId,
+                currentUserInitial: _currentUser.name.isNotEmpty
+                    ? _currentUser.name[0].toUpperCase()
+                    : '?',
+                currentUserColor: _currentUser.getVibeColor(),
+                onTap: hardRequests.isEmpty
+                    ? null
+                    : () => _openGroundSheet('Hard Ground', hardRequests),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 100),
+        ],
+      ),
+    );
   }
 
   // ── Personal Stats Card ────────────────────────────────────────────────────
@@ -702,23 +765,6 @@ class _FootballScreenState extends State<FootballScreen> {
                       );
                     }).toList(),
                   ),
-                  const SizedBox(height: 10),
-
-                  // Favorite ground
-                  Row(
-                    children: [
-                      Icon(Icons.location_on, size: 14, color: Colors.white38),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${user.favoriteGround} Regular',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white54,
-                        ),
-                      ),
-                    ],
-                  ),
                 ],
               ),
             ),
@@ -738,170 +784,6 @@ class _FootballScreenState extends State<FootballScreen> {
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (_) => _FullStatsSheet(user: user),
-    );
-  }
-
-  /// Builds a team request card
-  Widget _buildTeamRequestCard(TeamRequest request, ThemeData theme) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header with ground and time
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.secondaryContainer,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    _getGroundName(request.groundNumber),
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: theme.colorScheme.onSecondaryContainer,
-                    ),
-                  ),
-                ),
-                Text(
-                  _getTimeAgo(request.createdAt),
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.outline,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // Players status
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Players Needed',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: theme.colorScheme.outline,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${request.currentPlayers}/${request.playersNeeded}',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                SizedBox(
-                  width: 80,
-                  height: 80,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      // Circular Progress Indicator
-                      SizedBox(
-                        width: 80,
-                        height: 80,
-                        child: CircularProgressIndicator(
-                          value: request.progress,
-                          strokeWidth: 6,
-                          backgroundColor: theme.colorScheme.surfaceContainerHighest,
-                          valueColor: AlwaysStoppedAnimation(
-                            request.isFull
-                                ? Colors.green
-                                : theme.colorScheme.primary,
-                          ),
-                        ),
-                      ),
-                      // Center text
-                      Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            '${(request.progress * 100).toStringAsFixed(0)}%',
-                            style: theme.textTheme.labelLarge?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            // Player avatars and join button
-            Row(
-              children: [
-                // Avatars
-                SizedBox(
-                  width: 100,
-                  height: 40, // give Stack a bounded height so positioned avatars can layout
-                  child: Stack(
-                    children: List.generate(
-                      request.currentPlayers,
-                      (index) => Positioned(
-                        left: index * 20.0,
-                        child: CircleAvatar(
-                          radius: 18,
-                          backgroundColor: theme.colorScheme.primary,
-                          child: Text(
-                            'P${index + 1}',
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: theme.colorScheme.onPrimary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const Spacer(),
-                // Join button
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                  ),
-                  onPressed: request.isFull
-                      ? null
-                      : () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Joined team request!'),
-                              duration: Duration(seconds: 2),
-                            ),
-                          );
-                        },
-                  child: Text(
-                    request.isFull ? 'Full' : 'Join',
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -1114,202 +996,20 @@ class _FullStatsSheet extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// JOIN A TEAM — MODAL & RELATED WIDGETS
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// Ground definitions used by the Join a Team modal.
-/// Odd ground numbers are sand pitches; even are hard-court pitches.
-const List<Map<String, Object>> _kGrounds = [
-  {'id': 'sand', 'label': 'Sand Ground', 'numbers': <int>[1]},
-  {'id': 'hard', 'label': 'Hard Ground', 'numbers': <int>[2]},
-];
-
-/// Full-screen "Join a Team" ground-map modal.
+/// A large ground card showing a painted field with team request deck overlay.
 ///
-/// Displays [_kGrounds] as large tappable cards with an animated deck-of-cards
-/// overlay when requests exist. Tapping opens [_GroundRequestsSheet].
-class _JoinTeamModal extends StatefulWidget {
-  const _JoinTeamModal({
-    required this.teamRequests,
-    required this.onJoin,
-  });
-
-  final List<TeamRequest> teamRequests;
-  final ValueChanged<TeamRequest> onJoin;
-
-  @override
-  State<_JoinTeamModal> createState() => _JoinTeamModalState();
-}
-
-class _JoinTeamModalState extends State<_JoinTeamModal> {
-  List<TeamRequest> _requestsForGround(List<int> numbers) {
-    return widget.teamRequests
-        .where((r) => numbers.contains(r.groundNumber))
-        .toList()
-      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
-  }
-
-  void _openSheet(
-    BuildContext ctx,
-    String groundLabel,
-    List<TeamRequest> requests,
-  ) {
-    showModalBottomSheet<void>(
-      context: ctx,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (_) => _GroundRequestsSheet(
-        groundLabel: groundLabel,
-        requests: requests,
-        onJoin: (req) {
-          widget.onJoin(req);
-          Navigator.pop(ctx);
-          ScaffoldMessenger.of(ctx).showSnackBar(
-            SnackBar(
-              content: Text('Joined a team at $groundLabel!'),
-              backgroundColor: const Color(0xFF7CFC00),
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              duration: const Duration(seconds: 2),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final size = MediaQuery.of(context).size;
-
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: GestureDetector(
-        // Swipe-down anywhere to dismiss
-        onVerticalDragEnd: (details) {
-          if (details.velocity.pixelsPerSecond.dy > 400) {
-            Navigator.pop(context);
-          }
-        },
-        child: SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ── Header ─────────────────────────────────────────────────
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 20, 16, 0),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'SELECT A GROUND',
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: const Color(0xFF4A90D9).withOpacity(0.7),
-                              letterSpacing: 2,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'JOIN A TEAM',
-                            style: theme.textTheme.headlineMedium?.copyWith(
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 2,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: () => Navigator.pop(context),
-                      icon: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.08),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.close, size: 20),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 6),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Text(
-                  'Tap a ground to see active team requests',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: Colors.white38,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // ── Ground cards grid ───────────────────────────────────────
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: GridView.builder(
-                    physics: const NeverScrollableScrollPhysics(),
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 14,
-                      mainAxisSpacing: 14,
-                      childAspectRatio: 0.70,
-                    ),
-                    itemCount: _kGrounds.length,
-                    itemBuilder: (context, index) {
-                      final ground = _kGrounds[index];
-                      final numbers =
-                          (ground['numbers'] as List<int>);
-                      final label = ground['label'] as String;
-                      final isSand = ground['id'] == 'sand';
-                      final requests = _requestsForGround(numbers);
-                      return _GroundCard(
-                        label: label,
-                        isSand: isSand,
-                        requests: requests,
-                        screenWidth: size.width,
-                        onTap: requests.isEmpty
-                            ? null
-                            : () => _openSheet(context, label, requests),
-                      );
-                    },
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// A large ground card for the Join a Team modal.
-///
-/// Renders a custom-painted football field with:
-/// - Surface-type chip (SAND / HARD)
-/// - Ground name label
-/// - Animated deck-of-cards overlay when requests exist
-/// - Dimmed "No teams looking" empty state
-class _GroundCard extends StatelessWidget {
+/// Converted to [StatefulWidget] to drive the pulsing avatar animation when
+/// the current user has joined a team on this ground.
+class _GroundCard extends StatefulWidget {
   const _GroundCard({
     required this.label,
     required this.isSand,
     required this.requests,
     required this.screenWidth,
     required this.onTap,
+    required this.currentJoinedTeamId,
+    required this.currentUserInitial,
+    required this.currentUserColor,
   });
 
   final String label;
@@ -1317,24 +1017,60 @@ class _GroundCard extends StatelessWidget {
   final List<TeamRequest> requests;
   final double screenWidth;
   final VoidCallback? onTap;
+  final String? currentJoinedTeamId;
+  final String currentUserInitial;
+  final Color currentUserColor;
+
+  @override
+  State<_GroundCard> createState() => _GroundCardState();
+}
+
+class _GroundCardState extends State<_GroundCard>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulseCtrl;
+  late final Animation<double> _pulseAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1100),
+    )..repeat(reverse: true);
+    _pulseAnim = Tween<double>(begin: 0.35, end: 1.0).animate(
+      CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _pulseCtrl.dispose();
+    super.dispose();
+  }
+
+  bool get _isUserOnThisGround {
+    if (widget.currentJoinedTeamId == null) return false;
+    return widget.requests.any((r) => r.id == widget.currentJoinedTeamId);
+  }
 
   Color get _surfaceColor =>
-      isSand ? const Color(0xFF1A1306) : const Color(0xFF060D1A);
+      widget.isSand ? const Color(0xFF1A1306) : const Color(0xFF060D1A);
 
-  Color get _fieldColor => isSand
+  Color get _fieldColor => widget.isSand
       ? const Color(0xFFC8A96E).withOpacity(0.22)
       : const Color(0xFF4A90D9).withOpacity(0.16);
 
   Color get _accentColor =>
-      isSand ? const Color(0xFFD4A847) : const Color(0xFF4A90D9);
+      widget.isSand ? const Color(0xFFD4A847) : const Color(0xFF4A90D9);
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final hasRequests = requests.isNotEmpty;
+    final hasRequests = widget.requests.isNotEmpty;
+    final isUserHere = _isUserOnThisGround;
 
     return GestureDetector(
-      onTap: onTap,
+      onTap: widget.onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeOutCubic,
@@ -1342,20 +1078,30 @@ class _GroundCard extends StatelessWidget {
           color: _surfaceColor,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: hasRequests
-                ? _accentColor.withOpacity(0.55)
-                : Colors.white.withOpacity(0.07),
-            width: hasRequests ? 1.5 : 1,
+            color: isUserHere
+                ? const Color(0xFF7CFC00).withOpacity(0.7)
+                : hasRequests
+                    ? _accentColor.withOpacity(0.55)
+                    : Colors.white.withOpacity(0.07),
+            width: (isUserHere || hasRequests) ? 1.5 : 1,
           ),
-          boxShadow: hasRequests
+          boxShadow: isUserHere
               ? [
                   BoxShadow(
-                    color: _accentColor.withOpacity(0.22),
-                    blurRadius: 22,
-                    spreadRadius: 2,
+                    color: const Color(0xFF7CFC00).withOpacity(0.28),
+                    blurRadius: 28,
+                    spreadRadius: 3,
                   ),
                 ]
-              : const [],
+              : hasRequests
+                  ? [
+                      BoxShadow(
+                        color: _accentColor.withOpacity(0.22),
+                        blurRadius: 22,
+                        spreadRadius: 2,
+                      ),
+                    ]
+                  : const [],
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(19),
@@ -1381,32 +1127,72 @@ class _GroundCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Surface chip
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: _accentColor.withOpacity(0.14),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: _accentColor.withOpacity(0.38),
-                          width: 1,
+                    // Row: surface chip + avatar
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: _accentColor.withOpacity(0.14),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: _accentColor.withOpacity(0.38),
+                              width: 1,
+                            ),
+                          ),
+                          child: Text(
+                            widget.isSand ? 'SAND' : 'HARD',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: _accentColor,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1.2,
+                              fontSize: 10,
+                            ),
+                          ),
                         ),
-                      ),
-                      child: Text(
-                        isSand ? 'SAND' : 'HARD',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: _accentColor,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1.2,
-                          fontSize: 10,
-                        ),
-                      ),
+                        const Spacer(),
+                        // Pulsing user avatar when joined here
+                        if (isUserHere)
+                          AnimatedBuilder(
+                            animation: _pulseAnim,
+                            builder: (_, __) => Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: const Color(0xFF7CFC00),
+                                  width: 2,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(0xFF7CFC00)
+                                        .withOpacity(_pulseAnim.value * 0.65),
+                                    blurRadius: 14,
+                                    spreadRadius: 2,
+                                  ),
+                                ],
+                              ),
+                              child: CircleAvatar(
+                                backgroundColor: const Color(0xFF122012),
+                                child: Text(
+                                  widget.currentUserInitial,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w900,
+                                    color: widget.currentUserColor,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                     const SizedBox(height: 10),
                     // Ground name
                     Text(
-                      label,
+                      widget.label,
                       style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w800,
                         color: hasRequests ? Colors.white : Colors.white38,
@@ -1429,9 +1215,8 @@ class _GroundCard extends StatelessWidget {
     );
   }
 
-  /// Builds a physical deck-of-cards stack with a count badge.
   Widget _buildDeck(ThemeData theme) {
-    final count = requests.length;
+    final count = widget.requests.length;
     final deckDepth = count.clamp(0, 2);
 
     return SizedBox(
@@ -1439,7 +1224,6 @@ class _GroundCard extends StatelessWidget {
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          // Shadow cards behind the top card
           for (int i = 0; i < deckDepth; i++)
             Positioned(
               bottom: i * 7.0,
@@ -1450,8 +1234,8 @@ class _GroundCard extends StatelessWidget {
                 child: Container(
                   height: 66,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1C1C1C)
-                        .withOpacity(0.88 - i * 0.12),
+                    color:
+                        const Color(0xFF1C1C1C).withOpacity(0.88 - i * 0.12),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                       color: _accentColor.withOpacity(0.18),
@@ -1461,7 +1245,6 @@ class _GroundCard extends StatelessWidget {
                 ),
               ),
             ),
-          // Top card
           Positioned(
             bottom: 0,
             left: 0,
@@ -1513,7 +1296,6 @@ class _GroundCard extends StatelessWidget {
               ),
             ),
           ),
-          // Count badge
           Positioned(
             top: -8,
             right: -6,
@@ -1546,12 +1328,12 @@ class _GroundCard extends StatelessWidget {
     );
   }
 
-  /// Shown when the ground has no active requests.
   Widget _buildEmptyState(ThemeData theme) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Icon(Icons.sports_soccer_outlined, size: 30, color: Colors.white24),
+        const Icon(Icons.sports_soccer_outlined,
+            size: 30, color: Colors.white24),
         const SizedBox(height: 8),
         Text(
           'No teams\nlooking',
@@ -1625,12 +1407,20 @@ class _GroundRequestsSheet extends StatelessWidget {
   const _GroundRequestsSheet({
     required this.groundLabel,
     required this.requests,
+    required this.currentJoinedTeamId,
+    required this.currentUserName,
     required this.onJoin,
+    required this.onLeave,
+    required this.onOpenChat,
   });
 
   final String groundLabel;
   final List<TeamRequest> requests;
+  final String? currentJoinedTeamId;
+  final String currentUserName;
   final ValueChanged<TeamRequest> onJoin;
+  final VoidCallback onLeave;
+  final ValueChanged<TeamRequest> onOpenChat;
 
   String _timeAgo(DateTime dt) {
     final diff = DateTime.now().difference(dt);
@@ -1716,12 +1506,23 @@ class _GroundRequestsSheet extends StatelessWidget {
                   separatorBuilder: (_, __) => const SizedBox(height: 12),
                   itemBuilder: (context, index) {
                     final req = requests[index];
+                    final isJoined = req.id == currentJoinedTeamId;
+                    final hasJoinedAny = currentJoinedTeamId != null;
+                    // minutes left before 30-min dissolution
+                    final ageMin =
+                        DateTime.now().difference(req.createdAt).inMinutes;
+                    final minsLeft = (30 - ageMin).clamp(0, 30);
                     return _RequestListCard(
                       request: req,
                       groundLabel: groundLabel,
                       timeAgo: _timeAgo(req.createdAt),
                       isUrgent: index == 0,
+                      isJoined: isJoined,
+                      hasJoinedAnyTeam: hasJoinedAny,
+                      minutesLeft: minsLeft,
                       onJoin: () => onJoin(req),
+                      onLeave: onLeave,
+                      onOpenChat: () => onOpenChat(req),
                     );
                   },
                 ),
@@ -1741,33 +1542,49 @@ class _RequestListCard extends StatelessWidget {
     required this.groundLabel,
     required this.timeAgo,
     required this.isUrgent,
+    required this.isJoined,
+    required this.hasJoinedAnyTeam,
+    required this.minutesLeft,
     required this.onJoin,
+    required this.onLeave,
+    required this.onOpenChat,
   });
 
   final TeamRequest request;
   final String groundLabel;
   final String timeAgo;
   final bool isUrgent;
+  final bool isJoined;
+  final bool hasJoinedAnyTeam;
+  final int minutesLeft;
   final VoidCallback onJoin;
+  final VoidCallback onLeave;
+  final VoidCallback onOpenChat;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final spotsLeft = request.playersNeeded - request.currentPlayers;
+    final isExpiringSoon = minutesLeft <= 5;
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A),
+        color: isJoined
+            ? const Color(0xFF0D1F0D)
+            : const Color(0xFF1A1A1A),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isUrgent
-              ? const Color(0xFF7CFC00).withOpacity(0.32)
-              : Colors.white.withOpacity(0.07),
-          width: isUrgent ? 1.5 : 1,
+          color: isJoined
+              ? const Color(0xFF7CFC00).withOpacity(0.45)
+              : isUrgent
+                  ? const Color(0xFF7CFC00).withOpacity(0.32)
+                  : Colors.white.withOpacity(0.07),
+          width: (isJoined || isUrgent) ? 1.5 : 1,
         ),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
@@ -1816,7 +1633,35 @@ class _RequestListCard extends StatelessWidget {
                             ),
                           ),
                         ),
-                        if (isUrgent) ...[
+                        if (isJoined) ...[  
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF7CFC00).withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.check_circle,
+                                    size: 10,
+                                    color: Color(0xFF7CFC00)),
+                                const SizedBox(width: 3),
+                                Text(
+                                  'JOINED',
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: const Color(0xFF7CFC00),
+                                    fontSize: 8,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.8,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ] else if (isUrgent) ...[  
                           const SizedBox(width: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(
@@ -1847,33 +1692,99 @@ class _RequestListCard extends StatelessWidget {
                         fontSize: 11,
                       ),
                     ),
+                    const SizedBox(height: 2),
+                    // Expiry indicator
+                    Text(
+                      isExpiringSoon
+                          ? 'Expires in ${minutesLeft}m ⚠'
+                          : '${minutesLeft}m remaining',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: isExpiringSoon
+                            ? Colors.orange.shade400
+                            : Colors.white24,
+                        fontSize: 10,
+                        fontWeight: isExpiringSoon
+                            ? FontWeight.w700
+                            : FontWeight.w400,
+                      ),
+                    ),
                   ],
                 ),
               ),
               const SizedBox(width: 10),
-              // Join button
-              SizedBox(
-                height: 38,
-                child: ElevatedButton(
-                  onPressed: request.isFull ? null : onJoin,
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 18),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
+              // Join / joined action column
+              if (isJoined)
+                const Icon(Icons.check_circle,
+                    color: Color(0xFF7CFC00), size: 28)
+              else if (hasJoinedAnyTeam)
+                Opacity(
+                  opacity: 0.4,
+                  child: SizedBox(
+                    height: 38,
+                    child: ElevatedButton(
+                      onPressed: null,
+                      style: ElevatedButton.styleFrom(
+                        padding:
+                            const EdgeInsets.symmetric(horizontal: 10),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: Text(
+                        'In team',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 10,
+                        ),
+                      ),
                     ),
                   ),
-                  child: Text(
-                    request.isFull ? 'Full' : 'Join',
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
+                )
+              else
+                SizedBox(
+                  height: 38,
+                  child: ElevatedButton(
+                    onPressed: request.isFull ? null : onJoin,
+                    style: ElevatedButton.styleFrom(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 18),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    child: Text(
+                      request.isFull ? 'Full' : 'Join',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          // Slot progress bar
+          const SizedBox(height: 10),
+          // Expiry progress bar (30 min timeline)
+          Row(
+            children: [
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(2),
+                  child: LinearProgressIndicator(
+                    value: (30 - minutesLeft) / 30,
+                    minHeight: 3,
+                    backgroundColor: Colors.white12,
+                    valueColor: AlwaysStoppedAnimation(
+                      isExpiringSoon
+                          ? Colors.orange.shade600
+                          : Colors.white24,
                     ),
                   ),
                 ),
               ),
             ],
           ),
-          // Slot progress bar
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           Row(
             children: List.generate(request.playersNeeded, (i) {
               return Expanded(
@@ -1890,7 +1801,446 @@ class _RequestListCard extends StatelessWidget {
               );
             }),
           ),
+          // If joined: show OPEN TEAM CHAT + LEAVE buttons
+          if (isJoined) ...[  
+            const SizedBox(height: 12),
+            // OPEN TEAM CHAT
+            SizedBox(
+              width: double.infinity,
+              height: 42,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF1C3A6E), Color(0xFF0D5E6E)],
+                  ),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: ElevatedButton.icon(
+                  onPressed: onOpenChat,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.transparent,
+                    shadowColor: Colors.transparent,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  icon: const Icon(Icons.chat_bubble_outline,
+                      size: 16, color: Colors.white),
+                  label: const Text(
+                    'OPEN TEAM CHAT',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            // LEAVE TEAM
+            SizedBox(
+              width: double.infinity,
+              height: 38,
+              child: OutlinedButton.icon(
+                onPressed: onLeave,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.red.shade400,
+                  side: BorderSide(
+                      color: Colors.red.shade900.withOpacity(0.5)),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                icon: Icon(Icons.exit_to_app,
+                    size: 16, color: Colors.red.shade400),
+                label: Text(
+                  'LEAVE TEAM',
+                  style: TextStyle(
+                    color: Colors.red.shade400,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TEAM CHAT
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// In-memory chat message for a single team request session.
+class _ChatMessage {
+  _ChatMessage({
+    required this.userId,
+    required this.userName,
+    required this.text,
+    required this.timestamp,
+  });
+
+  final String userId;
+  final String userName;
+  final String text;
+  final DateTime timestamp;
+}
+
+/// Ephemeral team chat bottom sheet tied to a single [TeamRequest].
+class _TeamChatSheet extends StatefulWidget {
+  const _TeamChatSheet({
+    required this.request,
+    required this.currentUserId,
+    required this.currentUserName,
+    required this.messages,
+    required this.onSend,
+  });
+
+  final TeamRequest request;
+  final String currentUserId;
+  final String currentUserName;
+  final List<_ChatMessage> messages;
+  final ValueChanged<_ChatMessage> onSend;
+
+  @override
+  State<_TeamChatSheet> createState() => _TeamChatSheetState();
+}
+
+class _TeamChatSheetState extends State<_TeamChatSheet> {
+  final TextEditingController _inputCtrl = TextEditingController();
+  final ScrollController _scrollCtrl = ScrollController();
+
+  void _send() {
+    final text = _inputCtrl.text.trim();
+    if (text.isEmpty) return;
+    final msg = _ChatMessage(
+      userId: widget.currentUserId,
+      userName: widget.currentUserName,
+      text: text,
+      timestamp: DateTime.now(),
+    );
+    widget.onSend(msg);
+    _inputCtrl.clear();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollCtrl.hasClients) {
+        _scrollCtrl.animateTo(
+          _scrollCtrl.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
+  String _fmt(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inSeconds < 60) return 'just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    return '${diff.inHours}h ago';
+  }
+
+  @override
+  void dispose() {
+    _inputCtrl.dispose();
+    _scrollCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final groundName =
+        widget.request.groundNumber == 1 ? 'Sand Ground' : 'Hard Ground';
+
+    return Padding(
+      padding:
+          EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Container(
+        height: MediaQuery.of(context).size.height * 0.72,
+        decoration: const BoxDecoration(
+          color: Color(0xFF111111),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          children: [
+            // ── Handle + Header ─────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 14, 12, 0),
+              child: Column(
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.white24,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      const Icon(Icons.chat_bubble_outline,
+                          color: Color(0xFF4A90D9), size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'TEAM CHAT',
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: const Color(0xFF4A90D9)
+                                    .withOpacity(0.7),
+                                letterSpacing: 2,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            Text(
+                              groundName,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w900,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.06),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '${widget.request.currentPlayers}/'
+                          '${widget.request.playersNeeded} players',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: Colors.white54,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      IconButton(
+                        icon: const Icon(Icons.close,
+                            color: Colors.white54, size: 20),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            Divider(
+                color: Colors.white.withOpacity(0.06), height: 16),
+            // ── Message list ────────────────────────────────────────────
+            Expanded(
+              child: widget.messages.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.chat_bubble_outline,
+                              size: 40,
+                              color: Colors.white.withOpacity(0.1)),
+                          const SizedBox(height: 12),
+                          Text(
+                            'No messages yet.\nSay hi to your team!',
+                            textAlign: TextAlign.center,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: Colors.white30,
+                              height: 1.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      controller: _scrollCtrl,
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                      itemCount: widget.messages.length,
+                      itemBuilder: (context, i) {
+                        final msg = widget.messages[i];
+                        final isMe =
+                            msg.userId == widget.currentUserId;
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Row(
+                            mainAxisAlignment: isMe
+                                ? MainAxisAlignment.end
+                                : MainAxisAlignment.start,
+                            crossAxisAlignment:
+                                CrossAxisAlignment.end,
+                            children: [
+                              if (!isMe) ...[
+                                CircleAvatar(
+                                  radius: 14,
+                                  backgroundColor:
+                                      const Color(0xFF2A2A4A),
+                                  child: Text(
+                                    msg.userName.isNotEmpty
+                                        ? msg.userName[0]
+                                            .toUpperCase()
+                                        : '?',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: Color(0xFF4A90D9),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                              ],
+                              Flexible(
+                                child: Column(
+                                  crossAxisAlignment: isMe
+                                      ? CrossAxisAlignment.end
+                                      : CrossAxisAlignment.start,
+                                  children: [
+                                    if (!isMe)
+                                      Padding(
+                                        padding: const EdgeInsets
+                                            .only(
+                                            bottom: 3, left: 2),
+                                        child: Text(
+                                          msg.userName,
+                                          style: theme
+                                              .textTheme.labelSmall
+                                              ?.copyWith(
+                                            color: Colors.white38,
+                                            fontSize: 10,
+                                          ),
+                                        ),
+                                      ),
+                                    Container(
+                                      padding:
+                                          const EdgeInsets.symmetric(
+                                              horizontal: 12,
+                                              vertical: 8),
+                                      decoration: BoxDecoration(
+                                        color: isMe
+                                            ? const Color(0xFF1B3A1B)
+                                            : const Color(0xFF1E1E1E),
+                                        borderRadius:
+                                            BorderRadius.circular(12),
+                                        border: Border.all(
+                                          color: isMe
+                                              ? const Color(0xFF7CFC00)
+                                                  .withOpacity(0.25)
+                                              : Colors.white
+                                                  .withOpacity(0.07),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        msg.text,
+                                        style: theme
+                                            .textTheme.bodySmall
+                                            ?.copyWith(
+                                          color: Colors.white.withOpacity(0.87),
+                                          height: 1.4,
+                                        ),
+                                      ),
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.only(
+                                          top: 3, left: 2, right: 2),
+                                      child: Text(
+                                        _fmt(msg.timestamp),
+                                        style: theme
+                                            .textTheme.labelSmall
+                                            ?.copyWith(
+                                          color: Colors.white24,
+                                          fontSize: 9,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (isMe) const SizedBox(width: 4),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+            ),
+            // ── Text input ──────────────────────────────────────────────
+            Container(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              decoration: BoxDecoration(
+                color: const Color(0xFF111111),
+                border: Border(
+                  top: BorderSide(
+                      color: Colors.white.withOpacity(0.06)),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1A1A1A),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                            color: Colors.white.withOpacity(0.08)),
+                      ),
+                      child: TextField(
+                        controller: _inputCtrl,
+                        style: const TextStyle(
+                            color: Colors.white, fontSize: 14),
+                        decoration: const InputDecoration(
+                          hintText: 'Message your team...',
+                          hintStyle: TextStyle(
+                              color: Colors.white30, fontSize: 14),
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 10),
+                        ),
+                        onSubmitted: (_) => _send(),
+                        textInputAction: TextInputAction.send,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  GestureDetector(
+                    onTap: _send,
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF7CFC00),
+                        borderRadius: BorderRadius.circular(22),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF7CFC00)
+                                .withOpacity(0.35),
+                            blurRadius: 10,
+                            spreadRadius: 1,
+                          ),
+                        ],
+                      ),
+                      child: const Icon(Icons.send_rounded,
+                          color: Colors.black, size: 20),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
