@@ -52,6 +52,7 @@ class _FootballScreenState extends State<FootballScreen> {
       tags: ['Sledger', 'Sweaty', 'Clutch'],
       mainPosition: 'Striker',
       favoriteGround: 'Sand Ground',
+      rollNumber: '24BCE0740',
     );
 
     _teamRequests = [
@@ -270,12 +271,15 @@ class _FootballScreenState extends State<FootballScreen> {
                         Navigator.pop(context);
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content:
-                                const Text('Team request created successfully!'),
-                            backgroundColor: const Color(0xFF7CFC00),
+                            content: const Text(
+                              'Team request created successfully!',
+                              style: TextStyle(color: Color(0xFF7CFC00), fontWeight: FontWeight.w700),
+                            ),
+                            backgroundColor: Colors.black.withOpacity(0.80),
                             behavior: SnackBarBehavior.floating,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
+                              side: BorderSide(color: const Color(0xFF7CFC00).withOpacity(0.45)),
                             ),
                             duration: const Duration(seconds: 2),
                           ),
@@ -327,11 +331,16 @@ class _FootballScreenState extends State<FootballScreen> {
           _mainTimer = null;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: const Text('Full time — 10 minutes completed'),
-              backgroundColor: Colors.red.shade700,
+              content: Text(
+                'Full time — 10 minutes completed',
+                style: TextStyle(color: Colors.red.shade400, fontWeight: FontWeight.w700),
+              ),
+              backgroundColor: Colors.black.withOpacity(0.80),
               behavior: SnackBarBehavior.floating,
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: Colors.red.shade700.withOpacity(0.5)),
+              ),
               duration: const Duration(seconds: 3),
             ),
           );
@@ -350,11 +359,16 @@ class _FootballScreenState extends State<FootballScreen> {
     if (golden) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Match ended — Golden goal'),
-          backgroundColor: const Color(0xFF7CFC00),
+          content: const Text(
+            'Match ended — Golden goal',
+            style: TextStyle(color: Color(0xFF7CFC00), fontWeight: FontWeight.w700),
+          ),
+          backgroundColor: Colors.black.withOpacity(0.80),
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12)),
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: const Color(0xFF7CFC00).withOpacity(0.45)),
+          ),
           duration: const Duration(seconds: 3),
         ),
       );
@@ -376,12 +390,16 @@ class _FootballScreenState extends State<FootballScreen> {
     if (_currentJoinedTeamId != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text(
-              "You're already in a team. Leave current team first."),
-          backgroundColor: Colors.orange.shade800,
+          content: Text(
+            "You're already in a team. Leave current team first.",
+            style: TextStyle(color: Colors.orange.shade400, fontWeight: FontWeight.w700),
+          ),
+          backgroundColor: Colors.black.withOpacity(0.80),
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12)),
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: Colors.orange.shade800.withOpacity(0.5)),
+          ),
           duration: const Duration(seconds: 2),
         ),
       );
@@ -426,11 +444,16 @@ class _FootballScreenState extends State<FootballScreen> {
     if (wasInExpired) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Team disbanded after 30 minutes'),
-          backgroundColor: Colors.red.shade800,
+          content: Text(
+            'Team disbanded after 30 minutes',
+            style: TextStyle(color: Colors.red.shade400, fontWeight: FontWeight.w700),
+          ),
+          backgroundColor: Colors.black.withOpacity(0.80),
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12)),
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: Colors.red.shade700.withOpacity(0.5)),
+          ),
           duration: const Duration(seconds: 3),
         ),
       );
@@ -442,7 +465,7 @@ class _FootballScreenState extends State<FootballScreen> {
     return _teamRequests
         .where((r) => numbers.contains(r.groundNumber))
         .toList()
-      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt)); // newest first
   }
 
   /// Opens a [_GroundRequestsSheet] directly from the main screen.
@@ -628,7 +651,9 @@ class _FootballScreenState extends State<FootballScreen> {
                     ? _currentUser.name[0].toUpperCase()
                     : '?',
                 currentUserColor: _currentUser.getVibeColor(),
-                onTap: sandRequests.isEmpty
+                // Disable tap when user is already on this ground
+                onTap: sandRequests.isEmpty ||
+                        sandRequests.any((r) => r.id == _currentJoinedTeamId)
                     ? null
                     : () => _openGroundSheet('Sand Ground', sandRequests),
               ),
@@ -642,12 +667,130 @@ class _FootballScreenState extends State<FootballScreen> {
                     ? _currentUser.name[0].toUpperCase()
                     : '?',
                 currentUserColor: _currentUser.getVibeColor(),
-                onTap: hardRequests.isEmpty
+                onTap: hardRequests.isEmpty ||
+                        hardRequests.any((r) => r.id == _currentJoinedTeamId)
                     ? null
                     : () => _openGroundSheet('Hard Ground', hardRequests),
               ),
             ],
           ),
+
+          // ── Joined-team action bar ─────────────────────────────────────
+          if (_currentJoinedTeamId != null) ...[
+            const SizedBox(height: 16),
+            Builder(builder: (context) {
+              final joinedReq = _teamRequests.firstWhere(
+                (r) => r.id == _currentJoinedTeamId,
+                orElse: () => _teamRequests.first,
+              );
+              return Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0D1F0D),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: const Color(0xFF7CFC00).withOpacity(0.35),
+                    width: 1.5,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.check_circle,
+                            color: Color(0xFF7CFC00), size: 16),
+                        const SizedBox(width: 6),
+                        Text(
+                          'YOU\'RE IN A TEAM',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w900,
+                            color: Color(0xFF7CFC00),
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        // Open Chat
+                        Expanded(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [
+                                  Color(0xFF1C3A6E),
+                                  Color(0xFF0D5E6E)
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: ElevatedButton.icon(
+                              onPressed: () => _showTeamChat(joinedReq),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.transparent,
+                                shadowColor: Colors.transparent,
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                              icon: const Icon(
+                                  Icons.chat_bubble_outline,
+                                  size: 16,
+                                  color: Colors.white),
+                              label: const Text(
+                                'TEAM CHAT',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 1,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        // Leave Team
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _leaveTeam,
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.red.shade400,
+                              side: BorderSide(
+                                  color: Colors.red.shade900
+                                      .withOpacity(0.5)),
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                            icon: Icon(Icons.exit_to_app,
+                                size: 16, color: Colors.red.shade400),
+                            label: Text(
+                              'LEAVE TEAM',
+                              style: TextStyle(
+                                color: Colors.red.shade400,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 1,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ],
 
           const SizedBox(height: 100),
         ],
@@ -727,9 +870,11 @@ class _FootballScreenState extends State<FootballScreen> {
                   ),
                   const SizedBox(height: 6),
 
-                  // Position
+                  // Roll number
                   Text(
-                    user.mainPosition.toUpperCase(),
+                    user.rollNumber.isNotEmpty
+                        ? user.rollNumber.toUpperCase()
+                        : user.mainPosition.toUpperCase(),
                     style: const TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
@@ -783,27 +928,80 @@ class _FootballScreenState extends State<FootballScreen> {
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (_) => _FullStatsSheet(user: user),
+      builder: (_) => _FullStatsSheet(
+        user: user,
+        onSave: (name, tags) {
+          setState(() {
+            _currentUser = _currentUser.copyWith(
+              name: name.isEmpty ? _currentUser.name : name,
+              tags: tags,
+            );
+          });
+        },
+      ),
     );
   }
 }
 
-/// Full-detail player stats bottom sheet.
-class _FullStatsSheet extends StatelessWidget {
-  const _FullStatsSheet({required this.user});
+/// All available player tags for selection.
+const List<String> _kFootballTags = [
+  'Team Player', 'Clutch', 'Early Bird', 'Consistent', 'No Cap',
+  'Captain', 'Built Different', 'Carrying', 'Chill',
+  'Sweaty', 'Ball Hog', 'Rage Quitter', 'Excuse Maker',
+  'Sledger', 'Bad Mouth', 'Toxic', 'Cooked',
+  'Late', 'Mid', 'NPC',
+];
+
+/// Full-detail player stats bottom sheet (with edit support).
+class _FullStatsSheet extends StatefulWidget {
+  const _FullStatsSheet({required this.user, required this.onSave});
 
   final UserStats user;
+  final void Function(String name, List<String> tags) onSave;
+
+  @override
+  State<_FullStatsSheet> createState() => _FullStatsSheetState();
+}
+
+class _FullStatsSheetState extends State<_FullStatsSheet> {
+  bool _isEditing = false;
+  late TextEditingController _nameController;
+  late List<String> _selectedTags;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.user.name);
+    _selectedTags = List<String>.from(widget.user.tags);
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  void _saveChanges() {
+    widget.onSave(
+      _nameController.text.trim(),
+      List<String>.from(_selectedTags),
+    );
+    setState(() => _isEditing = false);
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final vibeColor = user.getVibeColor();
+    final vibeColor = widget.user.getVibeColor();
+    final rollLabel = widget.user.rollNumber.isNotEmpty
+        ? widget.user.rollNumber.toUpperCase()
+        : widget.user.mainPosition.toUpperCase();
 
     return DraggableScrollableSheet(
       expand: false,
-      initialChildSize: 0.50,
+      initialChildSize: 0.55,
       minChildSize: 0.35,
-      maxChildSize: 0.85,
+      maxChildSize: 0.92,
       builder: (context, scrollController) {
         return Container(
           decoration: BoxDecoration(
@@ -848,7 +1046,9 @@ class _FullStatsSheet extends StatelessWidget {
                       radius: 30,
                       backgroundColor: const Color(0xFF2A2A2A),
                       child: Text(
-                        user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
+                        _nameController.text.isNotEmpty
+                            ? _nameController.text[0].toUpperCase()
+                            : '?',
                         style: TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.w900,
@@ -863,9 +1063,11 @@ class _FullStatsSheet extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          user.name.toUpperCase(),
+                          _isEditing
+                              ? 'EDIT PROFILE'
+                              : _nameController.text.toUpperCase(),
                           style: const TextStyle(
-                            fontSize: 24,
+                            fontSize: 22,
                             fontWeight: FontWeight.w900,
                             color: Colors.white,
                             letterSpacing: 1.5,
@@ -881,7 +1083,7 @@ class _FullStatsSheet extends StatelessWidget {
                             border: Border.all(color: Colors.white24),
                           ),
                           child: Text(
-                            user.mainPosition.toUpperCase(),
+                            rollLabel,
                             style: const TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.w800,
@@ -893,6 +1095,28 @@ class _FullStatsSheet extends StatelessWidget {
                       ],
                     ),
                   ),
+                  if (_isEditing)
+                    TextButton(
+                      onPressed: _saveChanges,
+                      child: const Text(
+                        'SAVE',
+                        style: TextStyle(
+                          color: Color(0xFF7CFC00),
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1,
+                        ),
+                      ),
+                    )
+                  else
+                    IconButton(
+                      tooltip: 'Edit profile',
+                      onPressed: () => setState(() => _isEditing = true),
+                      icon: const Icon(
+                        Icons.edit_outlined,
+                        color: Colors.white38,
+                        size: 22,
+                      ),
+                    ),
                   IconButton(
                     onPressed: () => Navigator.pop(context),
                     icon: const Icon(Icons.close, color: Colors.white38),
@@ -903,91 +1127,185 @@ class _FullStatsSheet extends StatelessWidget {
               const Divider(color: Colors.white12),
               const SizedBox(height: 20),
 
-              // Favorite ground
-              Row(
-                children: [
-                  Icon(Icons.location_on, size: 18, color: vibeColor),
-                  const SizedBox(width: 8),
-                  Text(
-                    user.favoriteGround,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                    ),
+              // ── EDIT MODE ────────────────────────────────────────────────
+              if (_isEditing) ...[
+                Text(
+                  'DISPLAY NAME',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: Colors.white38,
+                    letterSpacing: 2,
+                    fontWeight: FontWeight.w700,
                   ),
-                  const Spacer(),
-                  Text(
-                    'FAVORITE',
-                    style: TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white38,
-                      letterSpacing: 1,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              const Divider(color: Colors.white12),
-              const SizedBox(height: 20),
-
-              // Tags section
-              Text(
-                'PLAYER TAGS',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: Colors.white38,
-                  letterSpacing: 2,
-                  fontWeight: FontWeight.w700,
                 ),
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: user.tags.map((tag) {
-                  final c = tagColor(tag);
-                  return Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: c.withOpacity(0.15),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _nameController,
+                  onChanged: (_) => setState(() {}),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  decoration: InputDecoration(
+                    filled: true,
+                    fillColor: const Color(0xFF0A0A0A),
+                    hintText: 'Enter display name',
+                    hintStyle: const TextStyle(color: Colors.white38),
+                    border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: c.withOpacity(0.45), width: 1.5),
+                      borderSide: const BorderSide(color: Colors.white24),
                     ),
-                    child: Text(
-                      '#${tag.toUpperCase()}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                        color: c,
-                        letterSpacing: 0.8,
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(
+                        color: Color(0xFF7CFC00),
+                        width: 1.5,
                       ),
                     ),
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 20),
-
-              // Brief description
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.03),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.white.withOpacity(0.05)),
-                ),
-                child: Text(
-                  'Prefers ${user.favoriteGround}, plays ${user.mainPosition.toLowerCase()}',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white60,
-                    height: 1.4,
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Colors.white12),
+                    ),
                   ),
-                  textAlign: TextAlign.center,
                 ),
-              ),
+                const SizedBox(height: 24),
+                Text(
+                  'CHOOSE TAGS',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: Colors.white38,
+                    letterSpacing: 2,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Tap to select / deselect  •  max 3  (${_selectedTags.length}/3 selected)',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: _selectedTags.length >= 3
+                        ? const Color(0xFF7CFC00)
+                        : Colors.white24,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _kFootballTags.map((tag) {
+                    final selected = _selectedTags.contains(tag);
+                    final limitReached = _selectedTags.length >= 3;
+                    final disabled = !selected && limitReached;
+                    final c = tagColor(tag);
+                    return GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          if (selected) {
+                            _selectedTags.remove(tag);
+                          } else if (_selectedTags.length < 3) {
+                            _selectedTags.add(tag);
+                          }
+                        });
+                      },
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 160),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: selected
+                              ? c.withOpacity(0.22)
+                              : Colors.white.withOpacity(disabled ? 0.02 : 0.04),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: selected ? c : (disabled ? Colors.white.withOpacity(0.06) : Colors.white12),
+                            width: selected ? 1.5 : 1,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (selected)
+                              Padding(
+                                padding: const EdgeInsets.only(right: 5),
+                                child: Icon(Icons.check,
+                                    size: 12, color: c),
+                              ),
+                            Text(
+                              '#${tag.toUpperCase()}',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                color: selected ? c : (disabled ? Colors.white12 : Colors.white38),
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 28),
+                // Save button at the bottom of edit mode
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _saveChanges,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF7CFC00),
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text(
+                      'SAVE CHANGES',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                  ),
+                ),
+              ] else ...[
+                // ── VIEW MODE ──────────────────────────────────────────────
+
+                // Tags section
+                Text(
+                  'PLAYER TAGS',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: Colors.white38,
+                    letterSpacing: 2,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: _selectedTags.map((tag) {
+                    final c = tagColor(tag);
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: c.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(12),
+                        border:
+                            Border.all(color: c.withOpacity(0.45), width: 1.5),
+                      ),
+                      child: Text(
+                        '#${tag.toUpperCase()}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: c,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 20),
+              ],
             ],
           ),
         );
@@ -1743,22 +2061,51 @@ class _RequestListCard extends StatelessWidget {
               else
                 SizedBox(
                   height: 38,
-                  child: ElevatedButton(
-                    onPressed: request.isFull ? null : onJoin,
-                    style: ElevatedButton.styleFrom(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 18),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    child: Text(
-                      request.isFull ? 'Full' : 'Join',
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
+                  child: request.isFull
+                      ? OutlinedButton(
+                          onPressed: null,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white38,
+                            side: const BorderSide(color: Colors.white12),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 18),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          child: const Text(
+                            'FULL',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 12,
+                              letterSpacing: 1,
+                            ),
+                          ),
+                        )
+                      : OutlinedButton(
+                          onPressed: onJoin,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFF7CFC00),
+                            side: const BorderSide(
+                                color: Color(0xFF7CFC00), width: 1.5),
+                            backgroundColor:
+                                const Color(0xFF7CFC00).withOpacity(0.08),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 18),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          child: const Text(
+                            'JOIN',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 12,
+                              letterSpacing: 1,
+                              color: Color(0xFF7CFC00),
+                            ),
+                          ),
+                        ),
                 ),
             ],
           ),
@@ -1801,76 +2148,7 @@ class _RequestListCard extends StatelessWidget {
               );
             }),
           ),
-          // If joined: show OPEN TEAM CHAT + LEAVE buttons
-          if (isJoined) ...[  
-            const SizedBox(height: 12),
-            // OPEN TEAM CHAT
-            SizedBox(
-              width: double.infinity,
-              height: 42,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF1C3A6E), Color(0xFF0D5E6E)],
-                  ),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: ElevatedButton.icon(
-                  onPressed: onOpenChat,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.transparent,
-                    shadowColor: Colors.transparent,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  icon: const Icon(Icons.chat_bubble_outline,
-                      size: 16, color: Colors.white),
-                  label: const Text(
-                    'OPEN TEAM CHAT',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            // LEAVE TEAM
-            SizedBox(
-              width: double.infinity,
-              height: 38,
-              child: OutlinedButton.icon(
-                onPressed: onLeave,
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.red.shade400,
-                  side: BorderSide(
-                      color: Colors.red.shade900.withOpacity(0.5)),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                icon: Icon(Icons.exit_to_app,
-                    size: 16, color: Colors.red.shade400),
-                label: Text(
-                  'LEAVE TEAM',
-                  style: TextStyle(
-                    color: Colors.red.shade400,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
-            ),
-          ],
+
         ],
       ),
     );

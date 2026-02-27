@@ -7,6 +7,7 @@ class UserStats {
   final List<String> tags;
   final String mainPosition;
   final String favoriteGround;
+  final String rollNumber;
 
   const UserStats({
     required this.userId,
@@ -15,7 +16,28 @@ class UserStats {
     required this.tags,
     required this.mainPosition,
     required this.favoriteGround,
+    this.rollNumber = '',
   });
+
+  UserStats copyWith({
+    String? userId,
+    String? name,
+    String? photoUrl,
+    List<String>? tags,
+    String? mainPosition,
+    String? favoriteGround,
+    String? rollNumber,
+  }) {
+    return UserStats(
+      userId: userId ?? this.userId,
+      name: name ?? this.name,
+      photoUrl: photoUrl ?? this.photoUrl,
+      tags: tags ?? this.tags,
+      mainPosition: mainPosition ?? this.mainPosition,
+      favoriteGround: favoriteGround ?? this.favoriteGround,
+      rollNumber: rollNumber ?? this.rollNumber,
+    );
+  }
 
   /// Returns the primary tag (first in list)
   String getTopTag() {
@@ -56,6 +78,7 @@ class UserStats {
       tags: List<String>.from(json['tags'] as List),
       mainPosition: json['mainPosition'] as String,
       favoriteGround: json['favoriteGround'] as String,
+      rollNumber: (json['rollNumber'] as String?) ?? '',
     );
   }
 
@@ -67,6 +90,7 @@ class UserStats {
       'tags': tags,
       'mainPosition': mainPosition,
       'favoriteGround': favoriteGround,
+      'rollNumber': rollNumber,
     };
   }
 }
