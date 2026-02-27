@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/team_request.dart';
+import '../models/user_stats.dart';
 
 /// Football screen displaying active games and team requests.
 /// 
@@ -19,6 +20,9 @@ class _FootballScreenState extends State<FootballScreen> {
   /// Mock data for team requests
   late List<TeamRequest> _teamRequests;
 
+  /// Current logged-in user's stats (mock).
+  late UserStats _currentUser;
+
   /// Selected ground for creating new team request
   int _selectedGround = 1;
 
@@ -36,6 +40,15 @@ class _FootballScreenState extends State<FootballScreen> {
   @override
   void initState() {
     super.initState();
+    _currentUser = const UserStats(
+      userId: 'current_user_123',
+      name: 'Rahul',
+      photoUrl: '',
+      tags: ['Sledger', 'Sweaty', 'Clutch'],
+      mainPosition: 'Striker',
+      favoriteGround: 'Sand Ground',
+    );
+
     _teamRequests = [
       TeamRequest(
         id: 'demo1',
@@ -431,7 +444,7 @@ class _FootballScreenState extends State<FootballScreen> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor: const Color(0xFF0A0A0A),
       appBar: AppBar(
         title: const Text('FOOTBALL'),
         actions: [
@@ -482,9 +495,10 @@ class _FootballScreenState extends State<FootballScreen> {
           ),
         ],
       ),
-      floatingActionButton: Column(
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+      floatingActionButton: Row(
         mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           FloatingActionButton.extended(
             heroTag: 'join_team_fab',
@@ -494,7 +508,7 @@ class _FootballScreenState extends State<FootballScreen> {
             backgroundColor: const Color(0xFF1A2A3A),
             foregroundColor: const Color(0xFF4A90D9),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(width: 12),
           FloatingActionButton.extended(
             heroTag: 'find_players_fab',
             onPressed: _showCreateTeamSheet,
@@ -514,6 +528,10 @@ class _FootballScreenState extends State<FootballScreen> {
       child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            // ── Personal stats card ───────────────────────────────────────
+            _buildPersonalStatsCard(theme),
+            const SizedBox(height: 24),
+
             // Looking for Players Section
             ShaderMask(
               shaderCallback: (bounds) => const LinearGradient(
@@ -574,8 +592,156 @@ class _FootballScreenState extends State<FootballScreen> {
       );
   }
 
+  // ── Personal Stats Card ────────────────────────────────────────────────────
 
-  /// Builds a team request card  /// Builds a team request card
+  Widget _buildPersonalStatsCard(ThemeData theme) {
+    final user = _currentUser;
+    final vibeColor = user.getVibeColor();
+
+    return GestureDetector(
+      onTap: () => _showFullStatsSheet(user),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A1A1A),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: vibeColor.withOpacity(0.55), width: 1.5),
+          boxShadow: [
+            BoxShadow(
+              color: vibeColor.withOpacity(0.18),
+              blurRadius: 20,
+              spreadRadius: 2,
+            ),
+          ],
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // Avatar
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: vibeColor, width: 2.5),
+                boxShadow: [
+                  BoxShadow(
+                    color: vibeColor.withOpacity(0.35),
+                    blurRadius: 14,
+                    spreadRadius: 1,
+                  ),
+                ],
+              ),
+              child: CircleAvatar(
+                radius: 34,
+                backgroundColor: const Color(0xFF2A2A2A),
+                child: Text(
+                  user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
+                  style: TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.w900,
+                    color: vibeColor,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 16),
+
+            // Info column
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Name
+                  Text(
+                    user.name.toUpperCase(),
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+
+                  // Position
+                  Text(
+                    user.mainPosition.toUpperCase(),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white60,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Tags as pills
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: user.tags.take(3).map((tag) {
+                      final c = tagColor(tag);
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: c.withOpacity(0.18),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: c.withOpacity(0.45), width: 1),
+                        ),
+                        child: Text(
+                          '#${tag.toUpperCase()}',
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                            color: c,
+                            letterSpacing: 0.8,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 10),
+
+                  // Favorite ground
+                  Row(
+                    children: [
+                      Icon(Icons.location_on, size: 14, color: Colors.white38),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${user.favoriteGround} Regular',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white54,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            // Expand icon
+            Icon(Icons.chevron_right, color: Colors.white38, size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Opens the full-detail stats bottom sheet.
+  void _showFullStatsSheet(UserStats user) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => _FullStatsSheet(user: user),
+    );
+  }
+
+  /// Builds a team request card
   Widget _buildTeamRequestCard(TeamRequest request, ThemeData theme) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -684,6 +850,7 @@ class _FootballScreenState extends State<FootballScreen> {
                 // Avatars
                 SizedBox(
                   width: 100,
+                  height: 40, // give Stack a bounded height so positioned avatars can layout
                   child: Stack(
                     children: List.generate(
                       request.currentPlayers,
@@ -735,6 +902,214 @@ class _FootballScreenState extends State<FootballScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Full-detail player stats bottom sheet.
+class _FullStatsSheet extends StatelessWidget {
+  const _FullStatsSheet({required this.user});
+
+  final UserStats user;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final vibeColor = user.getVibeColor();
+
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.50,
+      minChildSize: 0.35,
+      maxChildSize: 0.85,
+      builder: (context, scrollController) {
+        return Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A1A),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            border: Border.all(color: vibeColor.withOpacity(0.30), width: 1.5),
+          ),
+          child: ListView(
+            controller: scrollController,
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+            children: [
+              // Handle
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Header
+              Row(
+                children: [
+                  Container(
+                    width: 64,
+                    height: 64,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: vibeColor, width: 2),
+                      boxShadow: [
+                        BoxShadow(
+                          color: vibeColor.withOpacity(0.30),
+                          blurRadius: 12,
+                        ),
+                      ],
+                    ),
+                    child: CircleAvatar(
+                      radius: 30,
+                      backgroundColor: const Color(0xFF2A2A2A),
+                      child: Text(
+                        user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
+                        style: TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w900,
+                          color: vibeColor,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          user.name.toUpperCase(),
+                          style: const TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w900,
+                            color: Colors.white,
+                            letterSpacing: 1.5,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.07),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.white24),
+                          ),
+                          child: Text(
+                            user.mainPosition.toUpperCase(),
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white60,
+                              letterSpacing: 1,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close, color: Colors.white38),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              const Divider(color: Colors.white12),
+              const SizedBox(height: 20),
+
+              // Favorite ground
+              Row(
+                children: [
+                  Icon(Icons.location_on, size: 18, color: vibeColor),
+                  const SizedBox(width: 8),
+                  Text(
+                    user.favoriteGround,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    'FAVORITE',
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white38,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              const Divider(color: Colors.white12),
+              const SizedBox(height: 20),
+
+              // Tags section
+              Text(
+                'PLAYER TAGS',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: Colors.white38,
+                  letterSpacing: 2,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: user.tags.map((tag) {
+                  final c = tagColor(tag);
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: c.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: c.withOpacity(0.45), width: 1.5),
+                    ),
+                    child: Text(
+                      '#${tag.toUpperCase()}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: c,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 20),
+
+              // Brief description
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.03),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.white.withOpacity(0.05)),
+                ),
+                child: Text(
+                  'Prefers ${user.favoriteGround}, plays ${user.mainPosition.toLowerCase()}',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white60,
+                    height: 1.4,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

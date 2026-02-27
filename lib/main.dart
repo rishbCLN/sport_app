@@ -4,6 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
 import 'config/theme.dart';
 import 'screens/splash_screen.dart';
+import 'screens/home_screen.dart';
 
 /// Firebase configuration - Update this with your Firebase config
 // TODO: Configure Firebase setup
@@ -57,7 +58,7 @@ class MyApp extends StatelessWidget {
       theme: AppTheme.darkTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: ThemeMode.dark, // Always use premium dark theme
-      home: const SplashScreen(),
+      home: const HomeScreen(),
     );
   }
 }
