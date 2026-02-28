@@ -70,102 +70,104 @@ class _AdminTournamentScreenState extends State<AdminTournamentScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: const Color(0xFF7CFC00),
-        foregroundColor: Colors.black,
-        icon: const Icon(Icons.add),
-        label: const Text('Create'),
-        onPressed: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const TournamentCreationWizard()),
-        ),
-      ),
-      appBar: AppBar(
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
         backgroundColor: Colors.black,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF7CFC00)),
-          onPressed: () => Navigator.pop(context),
+        floatingActionButton: FloatingActionButton.extended(
+          backgroundColor: const Color(0xFF7CFC00),
+          foregroundColor: Colors.black,
+          icon: const Icon(Icons.add),
+          label: const Text('Create'),
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const TournamentCreationWizard()),
+          ),
         ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'TOURNAMENT ADMIN',
-              style: GoogleFonts.audiowide(
-                color: const Color(0xFF7CFC00),
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1.5,
-              ),
-            ),
-            Text(
-              'Admin Mode Active',
-              style: GoogleFonts.rajdhani(
-                color: Colors.red,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout, color: Colors.red),
-            tooltip: 'Exit Admin Mode',
+        appBar: AppBar(
+          backgroundColor: Colors.black,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Color(0xFF7CFC00)),
             onPressed: () => Navigator.pop(context),
           ),
-        ],
-      ),
-      body: RefreshIndicator(
-        color: const Color(0xFF7CFC00),
-        backgroundColor: const Color(0xFF121212),
-        onRefresh: () async {
-          _load();
-          await Future.delayed(const Duration(milliseconds: 300));
-        },
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16),
-          child: Column(
+          title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _sectionHeader('ACTIVE TOURNAMENTS (${_active.length})'),
-              if (_active.isEmpty)
-                _emptyState('No active tournaments')
-              else
-                ..._active.map((t) => _tournamentAdminCard(context, t)),
-              const SizedBox(height: 16),
-              _collapsibleCompleted(),
-              const SizedBox(height: 40),
+              Text(
+                'TOURNAMENT ADMIN',
+                style: GoogleFonts.audiowide(
+                  color: const Color(0xFF7CFC00),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.5,
+                ),
+              ),
+              Text(
+                'Admin Mode Active',
+                style: GoogleFonts.rajdhani(
+                  color: Colors.red,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ],
           ),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.logout, color: Colors.red),
+              tooltip: 'Exit Admin Mode',
+              onPressed: () => Navigator.pop(context),
+            ),
+          ],
+          bottom: TabBar(
+            indicatorColor: const Color(0xFF7CFC00),
+            indicatorWeight: 3,
+            labelColor: const Color(0xFF7CFC00),
+            unselectedLabelColor: Colors.white54,
+            labelStyle: GoogleFonts.rajdhani(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1,
+            ),
+            tabs: [
+              Tab(text: 'ACTIVE (${_active.length})'),
+              Tab(text: 'COMPLETED (${_completed.length})'),
+            ],
+          ),
+        ),
+        body: TabBarView(
+          children: [
+            _buildList(context, _active, emptyMessage: 'No active tournaments'),
+            _buildList(context, _completed,
+                emptyMessage: 'No completed tournaments'),
+          ],
         ),
       ),
     );
   }
 
-  Widget _collapsibleCompleted() {
-    if (_completed.isEmpty) return const SizedBox.shrink();
-    return Theme(
-      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-      child: ExpansionTile(
-        iconColor: Colors.white38,
-        collapsedIconColor: Colors.white24,
-        title: Text(
-          'COMPLETED TOURNAMENTS (${_completed.length})',
-          style: GoogleFonts.audiowide(
-            color: Colors.white38,
-            fontSize: 10,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 1.5,
-          ),
-        ),
-        children: _completed
-            .map((t) => _tournamentAdminCard(context, t))
-            .toList(),
-      ),
+  Widget _buildList(BuildContext context, List<Tournament> items,
+      {required String emptyMessage}) {
+    return RefreshIndicator(
+      color: const Color(0xFF7CFC00),
+      backgroundColor: const Color(0xFF121212),
+      onRefresh: () async {
+        _load();
+        await Future.delayed(const Duration(milliseconds: 300));
+      },
+      child: items.isEmpty
+          ? ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(16),
+              children: [_emptyState(emptyMessage)],
+            )
+          : ListView.builder(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
+              itemCount: items.length,
+              itemBuilder: (context, i) =>
+                  _tournamentAdminCard(context, items[i]),
+            ),
     );
   }
 
@@ -304,21 +306,6 @@ class _AdminTournamentScreenState extends State<AdminTournamentScreen> {
             style: GoogleFonts.rajdhani(fontSize: 12, color: Colors.white70),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _sectionHeader(String text) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Text(
-        text,
-        style: GoogleFonts.audiowide(
-          color: const Color(0xFF7CFC00),
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 1.4,
-        ),
       ),
     );
   }

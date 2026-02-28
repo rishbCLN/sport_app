@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import '../../models/tournament.dart';
 import '../../services/auth_service.dart';
+import '../../services/tournament_service.dart';
 import '../auth/login_screen.dart';
 import 'admin_tournament_screen.dart';
 import 'tournament_creation_wizard.dart';
@@ -12,8 +14,6 @@ class AdminHomeScreen extends StatefulWidget {
 }
 
 class _AdminHomeScreenState extends State<AdminHomeScreen> {
-  int _currentIndex = 0;
-
   void _logout() {
     showDialog(
       context: context,
@@ -45,6 +45,13 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final tournaments = TournamentService.instance.getTournaments();
+    final activeCount = tournaments.where((t) => t.status != 'completed').length;
+    final teamCount = tournaments.fold<int>(0, (sum, t) => sum + t.registeredTeamIds.length);
+    final liveMatches = tournaments
+        .expand((t) => t.matchSchedule)
+        .where((m) => m.status == 'live')
+        .length;
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -76,40 +83,49 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
           ),
         ],
       ),
-      body: _buildDashboard(theme),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (i) => setState(() => _currentIndex = i),
-        backgroundColor: Colors.black,
-        selectedItemColor: Colors.greenAccent,
-        unselectedItemColor: Colors.white60,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.list_alt), label: 'Tournaments'),
-          BottomNavigationBarItem(icon: Icon(Icons.groups), label: 'Teams'),
-          BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Settings'),
-        ],
+      body: _buildDashboard(
+        theme,
+        activeTournaments: activeCount,
+        teamCount: teamCount,
+        liveMatches: liveMatches,
+        tournaments: tournaments,
       ),
     );
   }
 
-  Widget _buildDashboard(ThemeData theme) {
+  Widget _buildDashboard(
+    ThemeData theme, {
+    required int activeTournaments,
+    required int teamCount,
+    required int liveMatches,
+    required List<Tournament> tournaments,
+  }) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _welcomeCard(theme),
+          _welcomeCard(
+            theme,
+            activeTournaments: activeTournaments,
+            teamCount: teamCount,
+            liveMatches: liveMatches,
+          ),
           const SizedBox(height: 16),
-          _actionGrid(theme),
+          _actionGrid(theme, activeBadge: activeTournaments),
           const SizedBox(height: 16),
-          _recentActivity(theme),
+          _recentActivity(theme, tournaments),
         ],
       ),
     );
   }
 
-  Widget _welcomeCard(ThemeData theme) {
+  Widget _welcomeCard(
+    ThemeData theme, {
+    required int activeTournaments,
+    required int teamCount,
+    required int liveMatches,
+  }) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -130,13 +146,13 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
               children: [
                 Text('Welcome, Admin', style: theme.textTheme.titleLarge),
                 const SizedBox(height: 6),
-                Row(
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
                   children: [
-                    _statChip('Active Tournaments', '3'),
-                    const SizedBox(width: 8),
-                    _statChip('Teams', '24'),
-                    const SizedBox(width: 8),
-                    _statChip('Live Matches', '2'),
+                    _statChip('Active Tournaments', '$activeTournaments'),
+                    _statChip('Teams', '$teamCount'),
+                    _statChip('Live Matches', '$liveMatches'),
                   ],
                 ),
               ],
@@ -155,7 +171,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     );
   }
 
-  Widget _actionGrid(ThemeData theme) {
+  Widget _actionGrid(ThemeData theme, {required int activeBadge}) {
     return GridView.count(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -179,7 +195,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
           title: 'Manage Active Tournaments',
           icon: Icons.list_alt,
           colors: const [Color(0xFF2E7D32), Color(0xFF66BB6A)],
-          badge: '3',
+          badge: activeBadge > 0 ? '$activeBadge' : null,
           onTap: () {
             Navigator.push(
               context,
@@ -259,12 +275,13 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     );
   }
 
-  Widget _recentActivity(ThemeData theme) {
-    final activities = [
-      "Team 'A Block Strikers' registered for Football Cup",
-      'Match 3 completed: Team A 5-3 Team B',
-      'New tournament created: Badminton Singles',
-    ];
+  Widget _recentActivity(ThemeData theme, List<Tournament> tournaments) {
+    final sorted = [...tournaments]
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    final activities = sorted.take(6).map<String>((t) {
+      final status = t.status.replaceAll('_', ' ').toUpperCase();
+      return '${t.name} • ${t.sport} • $status';
+    }).toList();
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -276,18 +293,24 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
         children: [
           Text('Recent Activity', style: theme.textTheme.titleMedium),
           const SizedBox(height: 12),
-          ...activities.map(
-            (e) => Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              child: Row(
-                children: [
-                  const Icon(Icons.bolt, color: Colors.greenAccent, size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text(e)),
-                ],
+          if (activities.isEmpty)
+            Text(
+              'No activity yet. Create or manage a tournament to get started.',
+              style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white60),
+            )
+          else
+            ...activities.map(
+              (e) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Row(
+                  children: [
+                    const Icon(Icons.bolt, color: Colors.greenAccent, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(e)),
+                  ],
+                ),
               ),
             ),
-          ),
         ],
       ),
     );

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/team_request.dart';
 import '../models/user_stats.dart';
+import '../services/auth_service.dart';
 
 /// Football screen displaying active games and team requests.
 /// 
@@ -17,10 +18,8 @@ class FootballScreen extends StatefulWidget {
 }
 
 class _FootballScreenState extends State<FootballScreen> {
-  /// Mock data for team requests
   late List<TeamRequest> _teamRequests;
 
-  /// Current logged-in user's stats (mock).
   late UserStats _currentUser;
 
   /// Selected ground for creating new team request
@@ -45,29 +44,18 @@ class _FootballScreenState extends State<FootballScreen> {
   @override
   void initState() {
     super.initState();
-    _currentUser = const UserStats(
-      userId: 'current_user_123',
-      name: 'Rahul',
+    final auth = AuthService();
+    _currentUser = UserStats(
+      userId: auth.currentUserId ?? 'user',
+      name: auth.currentUsername ?? 'Player',
       photoUrl: '',
-      tags: ['Sledger', 'Sweaty', 'Clutch'],
-      mainPosition: 'Striker',
-      favoriteGround: 'Sand Ground',
-      rollNumber: '24BCE0740',
+      tags: const [],
+      mainPosition: '',
+      favoriteGround: '',
+      rollNumber: '',
     );
 
-    _teamRequests = [
-      TeamRequest(
-        id: 'demo1',
-        sport: 'Football',
-        groundNumber: 1, // Sand Ground
-        playersNeeded: 6,
-        currentPlayers: 3,
-        playerIds: ['demo_user1', 'demo_user2', 'demo_user3'],
-        creatorId: 'demo_creator',
-        createdAt: DateTime.now().subtract(const Duration(minutes: 15)),
-        status: 'active',
-      ),
-    ];
+    _teamRequests = [];
     _startExpiryTimer();
   }
 
@@ -78,7 +66,7 @@ class _FootballScreenState extends State<FootballScreen> {
     super.dispose();
   }
 
-  /// Refreshes the data (mock implementation)
+  /// Refreshes the data (placeholder implementation)
   Future<void> _refreshData() async {
     setState(() => _isLoading = true);
     await Future.delayed(const Duration(seconds: 1));
