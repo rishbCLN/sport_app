@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
-import 'football_screen.dart';
+import '../features/football/screens/football_screen.dart' as prism;
+import '../features/tournaments/screens/tournaments_feed_screen.dart';
 import 'badminton_screen.dart';
 import 'cricket_screen.dart';
-import 'tournaments_screen.dart';
 import 'profile_screen.dart';
+import '../core/theme/colors.dart';
+import '../core/theme/typography.dart';
 
 /// Home screen with bottom navigation bar for the app.
 /// 
@@ -27,10 +29,10 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _screens = [
-      const FootballScreen(),
+      const prism.FootballScreen(),
       const BadmintonScreen(),
       const CricketScreen(),
-      const TournamentsScreen(),
+      const TournamentsFeedScreen(),
       const ProfileScreen(),
     ];
   }
@@ -77,33 +79,49 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Builds the bottom navigation bar with 5 destinations
   Widget navigationBar(BuildContext context) {
-    final theme = Theme.of(context);
+    return Container(
+      decoration: BoxDecoration(
+        color: PrismColors.pitch,
+        border: const Border(
+          top: BorderSide(color: PrismColors.concrete, width: 1),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: PrismColors.voltGreen.withOpacity(0.06),
+            blurRadius: 16,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: NavigationBar(
+        backgroundColor: Colors.transparent,
+        indicatorColor: PrismColors.voltGreen.withOpacity(0.15),
+        selectedIndex: _selectedIndex,
+        onDestinationSelected: _onNavigationItemSelected,
+        labelBehavior:
+            NavigationDestinationLabelBehavior.alwaysShow,
+        destinations: [
+          _navDest(Icons.sports_soccer, 'FOOTBALL',
+              PrismColors.voltGreen),
+          _navDest(Icons.sports_tennis, 'BADMINTON',
+              PrismColors.cyanBlitz),
+          _navDest(Icons.sports_cricket, 'CRICKET',
+              PrismColors.amberShock),
+          _navDest(Icons.emoji_events, 'EVENTS',
+              PrismColors.magentaFlare),
+          _navDest(Icons.person, 'PROFILE',
+              PrismColors.steelGray),
+        ],
+      ),
+    );
+  }
 
-    return NavigationBar(
-      selectedIndex: _selectedIndex,
-      onDestinationSelected: _onNavigationItemSelected,
-      destinations: const [
-        NavigationDestination(
-          icon: Icon(Icons.sports_soccer),
-          label: 'Football',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.sports_tennis),
-          label: 'Badminton',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.sports_cricket),
-          label: 'Cricket',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.emoji_events),
-          label: 'Tournaments',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.person),
-          label: 'Profile',
-        ),
-      ],
+  NavigationDestination _navDest(
+      IconData icon, String label, Color color) {
+    return NavigationDestination(
+      icon: Icon(icon, color: PrismColors.dimGray, size: 20),
+      selectedIcon: Icon(icon, color: color, size: 20),
+      label: label,
     );
   }
 }

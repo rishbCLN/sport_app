@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:provider/provider.dart';
 import 'config/backend_config.dart';
-import 'config/theme.dart';
+import 'core/theme/app_theme.dart';
 import 'firebase_options.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/home_screen.dart';
@@ -55,10 +54,10 @@ class MyApp extends StatelessWidget {
     // );
     
     return MaterialApp(
-      title: 'VIT Sports App',
+      title: 'PRISM Sports',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.darkTheme,
-      darkTheme: AppTheme.darkTheme,
+      theme: PrismTheme.dark,
+      darkTheme: PrismTheme.dark,
       themeMode: ThemeMode.dark,
       home: const LoginScreen(),
     );

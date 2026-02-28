@@ -1,8 +1,8 @@
 name: vit_sports_app
-description: A college sports team formation app for VIT.
+description: PRISM – VIT Sports Hub. A cinematic sports coordination platform.
 publish_to: 'none'
 
-version: 1.0.0+1
+version: 2.0.0+1
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -15,15 +15,18 @@ dependencies:
   firebase_core: ^2.24.0
   firebase_auth: ^4.14.0
   cloud_firestore: ^4.13.0
+  firebase_storage: ^11.5.0
 
   # State Management
-  provider: ^6.1.0
+  flutter_riverpod: ^2.4.9
 
   # Navigation
   go_router: ^12.0.0
 
-  # UI
+  # UI & Animations
   google_fonts: ^6.1.0
+  flutter_animate: ^4.3.0
+  cached_network_image: ^3.3.1
   cupertino_icons: ^1.0.6
 
   # Utilities
@@ -37,11 +40,3 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-
-  # Uncomment and add custom fonts as needed
-  # fonts:
-  #   - family: CustomFont
-  #     fonts:
-  #      - asset: assets/fonts/CustomFont-Regular.ttf
-  #       - asset: assets/fonts/CustomFont-Bold.ttf
-  #         weight: 700
