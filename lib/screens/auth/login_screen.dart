@@ -48,38 +48,47 @@ class _LoginScreenState extends State<LoginScreen>
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _loading = true);
-    final auth = AuthService();
-    final result = await auth.login(
-      _usernameCtrl.text.trim(),
-      _passwordCtrl.text,
-    );
-    setState(() => _loading = false);
-
-    if (result['success'] == true) {
-      final role = result['role'] as String;
-      if (!mounted) return;
-      if (role == 'admin') {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const AdminHomeScreen()),
-        );
-      } else {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const HomeScreen()),
-        );
-      }
-    } else {
-      _passwordCtrl.clear();
-      _shakeController.forward(from: 0);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          backgroundColor: Colors.red,
-          content: Text('Invalid username or password'),
-        ),
+    try {
+      final auth = AuthService();
+      final result = await auth.login(
+        _usernameCtrl.text.trim(),
+        _passwordCtrl.text,
       );
+
+      if (result['success'] == true) {
+        final role = result['role'] as String;
+        if (!mounted) return;
+        if (role == 'admin') {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const AdminHomeScreen()),
+          );
+        } else {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const HomeScreen()),
+          );
+        }
+      } else {
+        _handleAuthError(result['error']?.toString());
+      }
+    } catch (e) {
+      _handleAuthError(e.toString());
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
+  }
+
+  void _handleAuthError(String? message) {
+    _passwordCtrl.clear();
+    _shakeController.forward(from: 0);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: Colors.red,
+        content: Text(message ?? 'Invalid username or password'),
+      ),
+    );
   }
 
   @override

@@ -1,6 +1,8 @@
 import 'dart:async';
+import '../config/backend_config.dart';
+import 'firebase_auth_repository.dart';
 
-/// Simple demo authentication service with hardcoded credentials.
+/// Authentication service with optional Firebase backend.
 class AuthService {
   static const ADMIN_USERNAME = 'admin';
   static const ADMIN_PASSWORD = 'admin';
@@ -11,13 +13,35 @@ class AuthService {
   String? currentUserRole; // 'admin' or 'user'
   String? currentUsername;
 
+  FirebaseAuthRepository? _firebaseRepo;
+
   static final AuthService _instance = AuthService._internal();
   factory AuthService() => _instance;
   AuthService._internal();
 
   /// Attempts login with the provided credentials.
+  /// When [useFirebaseBackend] is true, treats username as email and
+  /// authenticates against Firebase Auth. Admin role is assigned if the
+  /// email is present in [adminEmails].
   Future<Map<String, dynamic>> login(String username, String password) async {
-    await Future.delayed(const Duration(milliseconds: 500));
+    if (useFirebaseBackend) {
+      _firebaseRepo ??= FirebaseAuthRepository();
+      try {
+        final cred = await _firebaseRepo!.signInWithEmailAndPassword(
+          email: username,
+          password: password,
+        );
+        final email = cred.user?.email ?? username;
+        currentUserId = cred.user?.uid ?? email;
+        currentUsername = email.split('@').first;
+        currentUserRole = adminEmails.contains(email.toLowerCase()) ? 'admin' : 'user';
+        return {'success': true, 'role': currentUserRole};
+      } on Object catch (e) {
+        return {'success': false, 'error': 'Login failed: $e'};
+      }
+    }
+
+    await Future.delayed(const Duration(milliseconds: 300));
 
     if (username == ADMIN_USERNAME && password == ADMIN_PASSWORD) {
       currentUserId = 'admin_001';
@@ -35,7 +59,11 @@ class AuthService {
   }
 
   /// Clears current session data.
-  void logout() {
+  Future<void> logout() async {
+    if (useFirebaseBackend) {
+      _firebaseRepo ??= FirebaseAuthRepository();
+      await _firebaseRepo!.signOut();
+    }
     currentUserId = null;
     currentUserRole = null;
     currentUsername = null;
