@@ -516,6 +516,14 @@ class _AdminDashboardScreenState
               ],
             ),
             const SizedBox(height: 12),
+            // Live match clock row
+            if (isLive && m.actualStartTime != null) ...[
+              _LiveMatchClockRow(
+                startTime: m.actualStartTime!,
+                onReset: () => _resetMatchClock(m),
+              ),
+              const SizedBox(height: 10),
+            ],
             // Action buttons
             if (!isDone)
               Row(
@@ -588,6 +596,23 @@ class _AdminDashboardScreenState
 
   void _startMatch(TournamentMatch m) =>
       _updateMatchStatus(m, 'live');
+
+  void _resetMatchClock(TournamentMatch m) {
+    final updated = TournamentMatch(
+      id: m.id, tournamentId: m.tournamentId,
+      matchNumber: m.matchNumber, round: m.round,
+      team1Id: m.team1Id, team2Id: m.team2Id,
+      team1Name: m.team1Name, team2Name: m.team2Name,
+      team1Score: m.team1Score, team2Score: m.team2Score,
+      winnerId: m.winnerId,
+      scheduledTime: m.scheduledTime,
+      actualStartTime: DateTime.now(),
+      actualEndTime: m.actualEndTime,
+      status: m.status, ground: m.ground,
+    );
+    TournamentService.instance.updateMatch(updated);
+    HapticFeedback.mediumImpact();
+  }
 
   void _endMatch(TournamentMatch m) {
     final winner = (m.team1Score ?? 0) >= (m.team2Score ?? 0)
@@ -1436,6 +1461,140 @@ class _TournamentWizardScreenState
           hintStyle:
               PrismText.body(color: PrismColors.dimGray),
         ),
+      ),
+    );
+  }
+}
+
+// ── Live match clock row ──────────────────────────────────────────────────────
+
+class _LiveMatchClockRow extends StatefulWidget {
+  final DateTime startTime;
+  final VoidCallback onReset;
+
+  const _LiveMatchClockRow({
+    required this.startTime,
+    required this.onReset,
+  });
+
+  @override
+  State<_LiveMatchClockRow> createState() =>
+      _LiveMatchClockRowState();
+}
+
+class _LiveMatchClockRowState
+    extends State<_LiveMatchClockRow> {
+  late Timer _ticker;
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = Timer.periodic(
+        const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _ticker.cancel();
+    super.dispose();
+  }
+
+  String get _elapsed {
+    final s =
+        DateTime.now().difference(widget.startTime).inSeconds.clamp(0, 99 * 60 + 59);
+    final m = (s ~/ 60).toString().padLeft(2, '0');
+    final sec = (s % 60).toString().padLeft(2, '0');
+    return '$m:$sec';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding:
+          const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: PrismColors.redAlert.withOpacity(0.06),
+        border: Border.all(
+            color: PrismColors.redAlert.withOpacity(0.25),
+            width: 1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          // Blinking dot
+          TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0.3, end: 1.0),
+            duration: const Duration(milliseconds: 700),
+            curve: Curves.easeInOut,
+            builder: (_, v, __) => Opacity(
+              opacity: v,
+              child: Container(
+                width: 7,
+                height: 7,
+                decoration: const BoxDecoration(
+                  color: PrismColors.redAlert,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            'ELAPSED',
+            style: PrismText.label(
+                    color: PrismColors.steelGray)
+                .copyWith(fontSize: 9, letterSpacing: 1.5),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            _elapsed,
+            style: PrismText.mono(
+              fontSize: 15,
+              color: PrismColors.redAlert,
+            ),
+          ),
+          const Spacer(),
+          // Reset clock button
+          GestureDetector(
+            onTap: () {
+              widget.onReset();
+              HapticFeedback.mediumImpact();
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color:
+                    PrismColors.amberShock.withOpacity(0.12),
+                border: Border.all(
+                    color:
+                        PrismColors.amberShock.withOpacity(0.4),
+                    width: 1),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.restart_alt_rounded,
+                    color: PrismColors.amberShock,
+                    size: 13,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'RESET CLOCK',
+                    style: PrismText.tag(
+                            color: PrismColors.amberShock)
+                        .copyWith(
+                            fontSize: 9, letterSpacing: 1.4),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
