@@ -27,8 +27,6 @@ class _TournamentsScreenState extends State<TournamentsScreen> {
   @override
   void initState() {
     super.initState();
-    // Seed data on first load
-    TournamentService.instance.seedDemoData();
     _load();
     TournamentService.instance.addListener(_load);
   }

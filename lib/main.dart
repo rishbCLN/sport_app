@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
 import 'config/theme.dart';
-import 'screens/splash_screen.dart';
+import 'screens/auth/login_screen.dart';
 import 'screens/home_screen.dart';
 
 /// Firebase configuration - Update this with your Firebase config
@@ -57,8 +57,8 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
       darkTheme: AppTheme.darkTheme,
-      themeMode: ThemeMode.dark, // Always use premium dark theme
-      home: const HomeScreen(),
+      themeMode: ThemeMode.dark,
+      home: const LoginScreen(),
     );
   }
 }
