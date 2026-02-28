@@ -1246,7 +1246,7 @@ class _TournamentWizardScreenState
     super.dispose();
   }
 
-  void _create() {
+  Future<void> _create() async {
     final name = _nameCtrl.text.trim();
     if (name.isEmpty) return;
 
@@ -1277,7 +1277,12 @@ class _TournamentWizardScreenState
 
     TournamentService.instance.addTournament(t);
     HapticFeedback.heavyImpact();
-    Navigator.of(context).pop();
+    await ConfettiOverlay.show(
+      context,
+      winnerName: name.toUpperCase(),
+      accentColor: PrismColors.magentaFlare,
+    );
+    if (mounted) Navigator.of(context).pop();
   }
 
   @override

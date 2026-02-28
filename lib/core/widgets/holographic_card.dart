@@ -44,6 +44,8 @@ class _HolographicCardState extends State<HolographicCard>
   late final AnimationController _scanCtrl;
   late final AnimationController _glowCtrl;
   late final AnimationController _tapCtrl;
+  // Separate pulsing controller for isLive border glow
+  late final AnimationController _liveCtrl;
 
   bool _pressed = false;
 
@@ -65,13 +67,27 @@ class _HolographicCardState extends State<HolographicCard>
       vsync: this,
       duration: const Duration(milliseconds: 160),
     );
+
+    _liveCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
+    if (widget.isLive) _liveCtrl.repeat(reverse: true);
   }
 
   @override
   void didUpdateWidget(HolographicCard old) {
     super.didUpdateWidget(old);
     if (widget.isLive != old.isLive) {
-      widget.isLive ? _glowCtrl.forward() : _glowCtrl.reverse();
+      if (widget.isLive) {
+        _glowCtrl.forward();
+        _liveCtrl.repeat(reverse: true);
+      } else {
+        _glowCtrl.reverse();
+        _liveCtrl.stop();
+        _liveCtrl.animateTo(0.0,
+            duration: const Duration(milliseconds: 300));
+      }
     }
   }
 
@@ -80,6 +96,7 @@ class _HolographicCardState extends State<HolographicCard>
     _scanCtrl.dispose();
     _glowCtrl.dispose();
     _tapCtrl.dispose();
+    _liveCtrl.dispose();
     super.dispose();
   }
 
@@ -109,7 +126,7 @@ class _HolographicCardState extends State<HolographicCard>
       onTapUp: widget.onTap != null ? _onTapUp : null,
       onTapCancel: widget.onTap != null ? _onTapCancel : null,
       child: AnimatedBuilder(
-        animation: Listenable.merge([_scanCtrl, _glowCtrl, _tapCtrl]),
+        animation: Listenable.merge([_scanCtrl, _glowCtrl, _tapCtrl, _liveCtrl]),
         builder: (context, _) {
           final glowIntensity = _glowCtrl.value;
           final tapScale = 1.0 - _tapCtrl.value * 0.04;
@@ -167,14 +184,14 @@ class _HolographicCardState extends State<HolographicCard>
                           ),
                         ),
                       ),
-                    // Live indicator border
+                    // Live indicator border — pulses via _liveCtrl
                     if (widget.isLive)
                       Positioned.fill(
                         child: Container(
                           decoration: BoxDecoration(
                             border: Border.all(
                               color: PrismColors.redAlert
-                                  .withOpacity(0.4 + glowIntensity * 0.4),
+                                  .withOpacity(0.3 + _liveCtrl.value * 0.6),
                               width: 1.5,
                             ),
                           ),

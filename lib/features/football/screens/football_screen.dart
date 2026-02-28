@@ -13,7 +13,7 @@ import '../../../core/widgets/ambient_particles.dart';
 import '../../../core/widgets/prism_widgets.dart';
 import '../../../models/team_request.dart';
 import '../../../models/user_stats.dart';
-import '../../../services/auth_service.dart';
+import '../../../services/user_profile_service.dart';
 import 'team_chat_screen.dart';
 import 'team_creation_modal.dart';
 
@@ -34,7 +34,9 @@ class FootballScreen extends StatefulWidget {
 class _FootballScreenState extends State<FootballScreen>
     with TickerProviderStateMixin {
   List<TeamRequest> _teamRequests = [];
-  late UserStats _currentUser;
+
+  // ── Current user (sourced from UserProfileService) ───────────────────────
+  UserStats get _currentUser => UserProfileService.instance.profile;
 
   // ── Match timer ──────────────────────────────────────────────────────────
   bool _timerRunning = false;
@@ -51,19 +53,14 @@ class _FootballScreenState extends State<FootballScreen>
   late final AnimationController _headerPulseCtrl;
   late final AnimationController _meshCtrl;
 
+  // ── UI state ─────────────────────────────────────────────────────────────
+  double _badgeScale = 1.0;
+
   @override
   void initState() {
     super.initState();
-    final auth = AuthService();
-    _currentUser = UserStats(
-      userId: auth.currentUserId ?? 'user',
-      name: auth.currentUsername ?? 'PLAYER',
-      photoUrl: '',
-      tags: const ['#SLEDGER', '#CLUTCH'],
-      mainPosition: 'Striker',
-      favoriteGround: 'Sand Ground',
-      rollNumber: '',
-    );
+    // Listen to profile changes so energy badge stays in sync
+    UserProfileService.instance.addListener(_onProfileChanged);
 
     _headerPulseCtrl = AnimationController(
       vsync: this,
@@ -80,11 +77,16 @@ class _FootballScreenState extends State<FootballScreen>
 
   @override
   void dispose() {
+    UserProfileService.instance.removeListener(_onProfileChanged);
     _mainTimer?.cancel();
     _expiryTimer?.cancel();
     _headerPulseCtrl.dispose();
     _meshCtrl.dispose();
     super.dispose();
+  }
+
+  void _onProfileChanged() {
+    if (mounted) setState(() {});
   }
 
   void _startExpiryTimer() {
@@ -259,7 +261,20 @@ class _FootballScreenState extends State<FootballScreen>
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                 sliver: SliverToBoxAdapter(
-                  child: _buildEnergyBadge()
+                  child: GestureDetector(
+                    onTapDown: (_) =>
+                        setState(() => _badgeScale = 0.97),
+                    onTapUp: (_) =>
+                        setState(() => _badgeScale = 1.0),
+                    onTapCancel: () =>
+                        setState(() => _badgeScale = 1.0),
+                    child: AnimatedScale(
+                      scale: _badgeScale,
+                      duration: const Duration(milliseconds: 100),
+                      curve: Curves.easeOutBack,
+                      child: _buildEnergyBadge(),
+                    ),
+                  )
                       .animate()
                       .fadeIn(
                           duration: 300.ms,
@@ -427,6 +442,11 @@ class _FootballScreenState extends State<FootballScreen>
       child: AnimatedBuilder(
         animation: _headerPulseCtrl,
         builder: (_, __) {
+          final isUrgent = _timerRunning && _elapsedSeconds > 540;
+          final activeColor = isUrgent
+              ? PrismColors.redAlert
+              : PrismColors.voltGreen;
+
           return Container(
             width: 72,
             height: 72,
@@ -434,7 +454,7 @@ class _FootballScreenState extends State<FootballScreen>
               color: PrismColors.pitch,
               border: Border.all(
                 color: _timerRunning
-                    ? PrismColors.voltGreen.withOpacity(
+                    ? activeColor.withOpacity(
                         0.4 + _headerPulseCtrl.value * 0.5)
                     : PrismColors.dimGray,
                 width: _timerRunning ? 2 : 1,
@@ -442,10 +462,13 @@ class _FootballScreenState extends State<FootballScreen>
               boxShadow: _timerRunning
                   ? [
                       BoxShadow(
-                        color: PrismColors.voltGreen.withOpacity(
-                            0.15 + _headerPulseCtrl.value * 0.25),
-                        blurRadius: 20,
-                        spreadRadius: 2,
+                        color: activeColor.withOpacity(
+                            0.15 + _headerPulseCtrl.value * 0.3),
+                        blurRadius:
+                            isUrgent ? 24 + _headerPulseCtrl.value * 12 : 20,
+                        spreadRadius: isUrgent
+                            ? 2 + _headerPulseCtrl.value * 3
+                            : 2,
                       ),
                     ]
                   : null,
@@ -453,13 +476,28 @@ class _FootballScreenState extends State<FootballScreen>
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
-                  _timerDisplay,
-                  style: PrismText.mono(
-                    fontSize: 15,
-                    color: _timerRunning
-                        ? PrismColors.voltGreen
-                        : PrismColors.steelGray,
+                // Digit morph via AnimatedSwitcher
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 200),
+                  transitionBuilder: (child, anim) => FadeTransition(
+                    opacity: anim,
+                    child: ScaleTransition(
+                      scale: Tween<double>(begin: 0.75, end: 1.0)
+                          .animate(CurvedAnimation(
+                              parent: anim,
+                              curve: Curves.easeOutBack)),
+                      child: child,
+                    ),
+                  ),
+                  child: Text(
+                    _timerDisplay,
+                    key: ValueKey(_elapsedSeconds),
+                    style: PrismText.mono(
+                      fontSize: isUrgent ? 14 : 15,
+                      color: _timerRunning
+                          ? activeColor
+                          : PrismColors.steelGray,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -467,7 +505,7 @@ class _FootballScreenState extends State<FootballScreen>
                   _timerRunning ? 'STOP' : 'START',
                   style: PrismText.label(
                     color: _timerRunning
-                        ? PrismColors.voltGreen
+                        ? activeColor
                         : PrismColors.dimGray,
                   ).copyWith(fontSize: 8),
                 ),

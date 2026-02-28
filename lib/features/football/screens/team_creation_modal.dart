@@ -353,7 +353,7 @@ class _TeamCreationModalState extends State<TeamCreationModal>
 
 // ── Helper widgets ────────────────────────────────────────────────────────────
 
-class _GroundSelector extends StatelessWidget {
+class _GroundSelector extends StatefulWidget {
   final String label;
   final String subtitle;
   final String emoji;
@@ -373,52 +373,96 @@ class _GroundSelector extends StatelessWidget {
   });
 
   @override
+  State<_GroundSelector> createState() => _GroundSelectorState();
+}
+
+class _GroundSelectorState extends State<_GroundSelector>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _glowCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _glowCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 350),
+    );
+  }
+
+  @override
+  void dispose() {
+    _glowCtrl.dispose();
+    super.dispose();
+  }
+
+  void _handleTap() {
+    widget.onTap();
+    _glowCtrl.forward().then((_) => _glowCtrl.reverse());
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOutCubic,
-        height: 120,
-        decoration: BoxDecoration(
-          color: selected
-              ? accentColor.withOpacity(0.1)
-              : PrismColors.concrete,
-          border: Border.all(
-            color: selected ? accentColor : PrismColors.dimGray,
-            width: selected ? 2 : 1,
+    final columnChild = Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(widget.emoji, style: const TextStyle(fontSize: 32)),
+        const SizedBox(height: 8),
+        Text(
+          widget.label,
+          style: PrismText.tag(
+            color: widget.selected
+                ? widget.accentColor
+                : PrismColors.ghostWhite,
           ),
-          boxShadow: selected
-              ? [
-                  BoxShadow(
-                    color: accentColor.withOpacity(0.25),
-                    blurRadius: 16,
-                    spreadRadius: 1,
-                  ),
-                ]
-              : null,
+          textAlign: TextAlign.center,
         ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(emoji, style: const TextStyle(fontSize: 32)),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              style: PrismText.tag(
-                color: selected ? accentColor : PrismColors.ghostWhite,
+        const SizedBox(height: 4),
+        Text(
+          widget.subtitle,
+          style: PrismText.caption(color: PrismColors.steelGray),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+
+    return GestureDetector(
+      onTap: _handleTap,
+      child: AnimatedBuilder(
+        animation: _glowCtrl,
+        builder: (_, child) {
+          final glowPulse = _glowCtrl.value;
+          final effectiveOpacity = widget.selected
+              ? (0.25 + glowPulse * 0.4)
+              : glowPulse * 0.55;
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
+            height: 120,
+            decoration: BoxDecoration(
+              color: widget.selected
+                  ? widget.accentColor.withOpacity(0.1)
+                  : PrismColors.concrete,
+              border: Border.all(
+                color: widget.selected
+                    ? widget.accentColor
+                    : PrismColors.dimGray,
+                width: widget.selected ? 2 : 1,
               ),
-              textAlign: TextAlign.center,
+              boxShadow: effectiveOpacity > 0.01
+                  ? [
+                      BoxShadow(
+                        color: widget.accentColor
+                            .withOpacity(effectiveOpacity),
+                        blurRadius: 16 + glowPulse * 20,
+                        spreadRadius: 1 + glowPulse * 2,
+                      ),
+                    ]
+                  : null,
             ),
-            const SizedBox(height: 4),
-            Text(
-              subtitle,
-              style: PrismText.caption(
-                  color: PrismColors.steelGray),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
+            child: child,
+          );
+        },
+        child: columnChild,
       ),
     );
   }
